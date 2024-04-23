@@ -7,6 +7,5 @@
 [![](https://img.shields.io/badge/made%20by-Numbat-green.svg?style=flat-square)](http://numbatx.com/)
 [![](https://img.shields.io/badge/project-Numbat%20Testnet-green.svg?style=flat-square)](http://numbatx.com/)
 
-
 # gn-vm-common
 Common structs between VM and node

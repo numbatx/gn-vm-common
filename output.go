@@ -1,8 +1,6 @@
 package vmcommon
 
 import (
-	"encoding/hex"
-	"fmt"
 	"math/big"
 )
 
@@ -48,20 +46,13 @@ type OutputAccount struct {
 	// Code is the assembled code of a smart contract account.
 	// This field will be populated when a new SC must be created after the transaction.
 	Code []byte
-
-	// Data will be populated if there is a transfer to this output account which has to
-	// be further interpreted or verified
-	Data []byte
-
-	// GasLimit will be populated if the call is a smart contract call for another shard
-	GasLimit uint64
 }
 
 // LogEntry represents an entry in the contract execution log.
 // TODO: document all fields.
 type LogEntry struct {
 	Address []byte
-	Topics  [][]byte
+	Topics  []*big.Int
 	Data    []byte
 }
 
@@ -71,7 +62,7 @@ type VMOutput struct {
 	// This value does not influence the account state in any way.
 	// The value should be accessible in a UI.
 	// ReturnData is part of the transaction receipt.
-	ReturnData [][]byte
+	ReturnData []*big.Int
 
 	// ReturnCode is the function call error code.
 	// If it is not `Ok`, the transaction failed in some way - gas is, however, consumed anyway.
@@ -82,11 +73,12 @@ type VMOutput struct {
 
 	// GasRemaining = VMInput.GasProvided - gas used.
 	// It is necessary to compute how much to charge the sender for the transaction.
-	GasRemaining uint64
+	GasRemaining *big.Int
 
 	// GasRefund is how much gas the sender earned during the transaction.
 	// Certain operations, like freeing up storage, actually return gas instead of consuming it.
 	// Based on GasRefund, the sender could in principle be rewarded instead of taxed.
+	// TODO: decide if we are going to support this.
 	GasRefund *big.Int
 
 	// OutputAccounts contains data about all acounts changed as a result of the transaction.
@@ -112,41 +104,4 @@ type VMOutput struct {
 	// The logs should be accessible to the UI.
 	// The logs are part of the transaction receipt.
 	Logs []*LogEntry
-}
-
-// ReturnDataKind specifies how to interpret VMOutputs's return data.
-// More specifically, how to interpret returned data's first item.
-type ReturnDataKind int
-
-const (
-	// AsBigInt to interpret as big int
-	AsBigInt ReturnDataKind = 1 << iota
-	// AsBigIntString to interpret as big int string
-	AsBigIntString
-	// AsString to interpret as string
-	AsString
-	// AsHex to interpret as hex
-	AsHex
-)
-
-// GetFirstReturnData is a helper function that returns the first ReturnData of VMOutput, interpreted as specified.
-func (vmOutput *VMOutput) GetFirstReturnData(asType ReturnDataKind) (interface{}, error) {
-	if len(vmOutput.ReturnData) == 0 {
-		return nil, fmt.Errorf("no return data")
-	}
-
-	returnData := vmOutput.ReturnData[0]
-
-	switch asType {
-	case AsBigInt:
-		return big.NewInt(0).SetBytes(returnData), nil
-	case AsBigIntString:
-		return big.NewInt(0).SetBytes(returnData).String(), nil
-	case AsString:
-		return string(returnData), nil
-	case AsHex:
-		return hex.EncodeToString(returnData), nil
-	}
-
-	return nil, fmt.Errorf("can't interpret return data")
 }
