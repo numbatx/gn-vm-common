@@ -75,6 +75,15 @@ type BlockchainHook interface {
 
 	// IsPayable checks weather the provided address can receive MOA or not
 	IsPayable(address []byte) (bool, error)
+
+	// SaveCompiledCode saves to cache and storage the compiled code
+	SaveCompiledCode(codeHash []byte, code []byte)
+
+	// GetCompiledCode returns the compiled code if it finds in the cache or storage
+	GetCompiledCode(codeHash []byte) (bool, []byte)
+
+	// ClearCompiledCodes clears the cache and storage of compiled codes
+	ClearCompiledCodes()
 }
 
 // UserAccountHandler defines a user account
