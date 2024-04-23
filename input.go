@@ -4,28 +4,20 @@ import (
 	"math/big"
 )
 
-// SCCallHeader contains data about the block in which the transaction resides.
-type SCCallHeader struct {
-	// Beneficiary is the block proposer.
-	// It is referred to as "coinbase" in the test .json files
-	// This value is accessible in the VM:
-	// - in IELE, it is returned by `call @iele.beneficiary`
-	Beneficiary *big.Int
+type CallType int
 
-	// Number refers to the block number
-	// This value is accessible in the VM:
-	// - in IELE, it is returned by `call @iele.number`
-	Number *big.Int
+const (
+	// DirectCall means that the call is an explicit SC invocation originating from a user Transaction
+	DirectCall CallType = 0
 
-	// GasLimit refers to the gas limit of a block
-	GasLimit *big.Int
+	// AsynchronousCall means that the invocation was performed from within
+	// another SmartContract from another Shard, using asyncCall
+	AsynchronousCall CallType = 1
 
-	// Timestamp indicates when the proposer proposed the block.
-	// It should be somehow encoded in the blockchain, in order to make VM execution deterministic.
-	// This value is accessible in the VM:
-	// - in IELE, it is returned by `call @iele.timestamp`
-	Timestamp *big.Int
-}
+	// AsynchronousCallBack means that an AsynchronousCall was performed
+	// previously, and now the control returns to the caller SmartContract's callBack method
+	AsynchronousCallBack CallType = 2
+)
 
 // VMInput contains the common fields between the 2 types of SC call.
 type VMInput struct {
@@ -37,13 +29,18 @@ type VMInput struct {
 	// For contract call, these are the parameters to the function referenced in ContractCallInput.Function.
 	// If the number of arguments does not match the function arity,
 	// the transaction will return FunctionWrongSignature ReturnCode.
-	Arguments []*big.Int
+	Arguments [][]byte
 
 	// CallValue is the value (amount of tokens) transferred by the transaction.
 	// The VM knows to subtract this value from sender balance (CallerAddr)
 	// and to add it to the smart contract balance.
 	// It is often, but not always zero in SC calls.
 	CallValue *big.Int
+
+	// CallType is the type of SmartContract call
+	// Based on this value, the VM is informed of whether the call is direct,
+	// asynchronous, or asynchronous callback.
+	CallType CallType
 
 	// GasPrice multiplied by the gas burned by the transaction yields the transaction fee.
 	// A larger GasPrice will incentivize block proposers to include the transaction in a block sooner,
@@ -53,18 +50,14 @@ type VMInput struct {
 	// 1. subtract GasPrice x GasProvided
 	// 2. call VM, which will subtract CallValue if enough funds remain
 	// 3. reimburse GasPrice x (VMOutput.GasRemaining + VMOutput.GasRefund)
-	GasPrice *big.Int
+	GasPrice uint64
 
 	// GasProvided is the maximum gas allowed for the smart contract execution.
 	// If the transaction consumes more gas than this value, it will immediately terminate
 	// and return OutOfGas ReturnCode.
 	// The sender will not be charged based on GasProvided, only on the gas burned,
 	// so it doesn't cost the sender more to have a higher gas limit.
-	GasProvided *big.Int
-
-	// Header is the block header info.
-	// The same object can be reused in all transaction inputs in a block.
-	Header *SCCallHeader
+	GasProvided uint64
 }
 
 // ContractCreateInput VM input when creating a new contract.
