@@ -4,19 +4,20 @@ import (
 	"math/big"
 )
 
+// CallType specifies the type of SC invocation (in terms of asynchronicity)
 type CallType int
 
 const (
 	// DirectCall means that the call is an explicit SC invocation originating from a user Transaction
-	DirectCall CallType = 0
+	DirectCall CallType = iota
 
 	// AsynchronousCall means that the invocation was performed from within
 	// another SmartContract from another Shard, using asyncCall
-	AsynchronousCall CallType = 1
+	AsynchronousCall
 
 	// AsynchronousCallBack means that an AsynchronousCall was performed
 	// previously, and now the control returns to the caller SmartContract's callBack method
-	AsynchronousCallBack CallType = 2
+	AsynchronousCallBack
 )
 
 // VMInput contains the common fields between the 2 types of SC call.
@@ -58,6 +59,12 @@ type VMInput struct {
 	// The sender will not be charged based on GasProvided, only on the gas burned,
 	// so it doesn't cost the sender more to have a higher gas limit.
 	GasProvided uint64
+
+	// OriginalTxHash
+	OriginalTxHash []byte
+
+	// CurrentTxHash
+	CurrentTxHash []byte
 }
 
 // ContractCreateInput VM input when creating a new contract.
@@ -72,6 +79,9 @@ type ContractCreateInput struct {
 	// For Iele VM, to convert a .iele file to this assembled byte array, see
 	// src/github.com/numbatx/gn-vm-iele/iele/compiler/compiler.AssembleIeleCode
 	ContractCode []byte
+
+	// ContractCodeMetadata is the code metadata of the contract being created.
+	ContractCodeMetadata []byte
 }
 
 // ContractCallInput VM input when calling a function from an existing contract
