@@ -3,7 +3,7 @@ package parsers
 import (
 	"encoding/hex"
 
-	vmcommon "github.com/numbatx/gn-vm-common"
+	"github.com/numbatx/gn-vm-common"
 )
 
 type storageUpdatesParser struct {

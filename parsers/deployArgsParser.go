@@ -1,7 +1,7 @@
 package parsers
 
 import (
-	vmcommon "github.com/numbatx/gn-vm-common"
+	"github.com/numbatx/gn-vm-common"
 )
 
 type deployArgsParser struct {

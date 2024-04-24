@@ -18,6 +18,10 @@ const (
 	// AsynchronousCallBack means that an AsynchronousCall was performed
 	// previously, and now the control returns to the caller SmartContract's callBack method
 	AsynchronousCallBack
+
+	// DCTTransferAndExecute means that there is a smart contract execution after the DCT transfer
+	// this is needed in order to skip the check whether a contract is payable or not
+	DCTTransferAndExecute
 )
 
 // VMInput contains the common fields between the 2 types of SC call.
@@ -71,6 +75,18 @@ type VMInput struct {
 	// CurrentTxHash
 	CurrentTxHash []byte
 
+	// PrevTxHash
+	PrevTxHash []byte
+
+	// DCTTransfers
+	DCTTransfers []*DCTTransfer
+
+	// ReturnCallAfterError
+	ReturnCallAfterError bool
+}
+
+// DCTTransfer defines the structure for and DCT / NFT transfer
+type DCTTransfer struct {
 	// DCTValue is the value (amount of tokens) transferred by the transaction.
 	// Before reaching the VM this value is subtracted from sender balance (CallerAddr)
 	// and to added to the smart contract balance.
@@ -79,11 +95,17 @@ type VMInput struct {
 
 	// DCTTokenName is the name of the token which was transferred by the transaction to the SC
 	DCTTokenName []byte
+
+	// DCTTokenType is the type of the transferred token
+	DCTTokenType uint32
+
+	// DCTTokenNonce is the nonce for the given NFT token
+	DCTTokenNonce uint64
 }
 
 // ContractCreateInput VM input when creating a new contract.
 // Here we have no RecipientAddr because
-// the address (PK) of the created account will be provided by the VM.
+// the address (PK) of the created account will be provided by the vmcommon.
 // We also do not need to specify a Function field,
 // because on creation `init` is always called.
 type ContractCreateInput struct {
@@ -110,4 +132,12 @@ type ContractCallInput struct {
 	// AllowInitFunction specifies whether calling the initialization method of
 	// the smart contract is allowed or not
 	AllowInitFunction bool
+}
+
+// ParsedDCTTransfers defines the struct for the parsed dct transfers
+type ParsedDCTTransfers struct {
+	DCTTransfers []*DCTTransfer
+	RcvAddr       []byte
+	CallFunction  string
+	CallArgs      [][]byte
 }

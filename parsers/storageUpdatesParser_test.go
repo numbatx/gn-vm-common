@@ -4,7 +4,7 @@ import (
 	"encoding/hex"
 	"testing"
 
-	vmcommon "github.com/numbatx/gn-vm-common"
+	"github.com/numbatx/gn-vm-common"
 	"github.com/stretchr/testify/require"
 )
 
