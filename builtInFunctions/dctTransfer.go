@@ -26,9 +26,11 @@ type dctTransfer struct {
 	shardCoordinator      vmcommon.Coordinator
 	mutExecution          sync.RWMutex
 
-	rolesHandler              vmcommon.DCTRoleHandler
-	transferToMetaEnableEpoch uint32
-	flagTransferToMeta        atomic.Flag
+	rolesHandler                   vmcommon.DCTRoleHandler
+	transferToMetaEnableEpoch      uint32
+	flagTransferToMeta             atomic.Flag
+	checkCorrectTokenIDEnableEpoch uint32
+	flagCheckCorrectTokenID        atomic.Flag
 }
 
 // NewDCTTransferFunc returns the dct transfer built-in function component
@@ -39,6 +41,7 @@ func NewDCTTransferFunc(
 	shardCoordinator vmcommon.Coordinator,
 	rolesHandler vmcommon.DCTRoleHandler,
 	transferToMetaEnableEpoch uint32,
+	checkCorrectTokenIDEnableEpoch uint32,
 	epochNotifier vmcommon.EpochNotifier,
 ) (*dctTransfer, error) {
 	if check.IfNil(marshalizer) {
@@ -58,14 +61,15 @@ func NewDCTTransferFunc(
 	}
 
 	e := &dctTransfer{
-		funcGasCost:               funcGasCost,
-		marshalizer:               marshalizer,
-		keyPrefix:                 []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
-		globalSettingsHandler:     globalSettingsHandler,
-		payableHandler:            &disabledPayableHandler{},
-		shardCoordinator:          shardCoordinator,
-		rolesHandler:              rolesHandler,
-		transferToMetaEnableEpoch: transferToMetaEnableEpoch,
+		funcGasCost:                    funcGasCost,
+		marshalizer:                    marshalizer,
+		keyPrefix:                      []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
+		globalSettingsHandler:          globalSettingsHandler,
+		payableHandler:                 &disabledPayableHandler{},
+		shardCoordinator:               shardCoordinator,
+		rolesHandler:                   rolesHandler,
+		checkCorrectTokenIDEnableEpoch: checkCorrectTokenIDEnableEpoch,
+		transferToMetaEnableEpoch:      transferToMetaEnableEpoch,
 	}
 
 	epochNotifier.RegisterNotifyHandler(e)
@@ -77,6 +81,8 @@ func NewDCTTransferFunc(
 func (e *dctTransfer) EpochConfirmed(epoch uint32, _ uint64) {
 	e.flagTransferToMeta.SetValue(epoch >= e.transferToMetaEnableEpoch)
 	log.Debug("DCT transfer to metachain flag", "enabled", e.flagTransferToMeta.IsSet())
+	e.flagCheckCorrectTokenID.SetValue(epoch >= e.checkCorrectTokenIDEnableEpoch)
+	log.Debug("DCT transfer check correct tokenID for transfer role", "enabled", e.flagCheckCorrectTokenID.IsSet())
 }
 
 // SetNewGasConfig is called whenever gas cost is changed
@@ -116,7 +122,12 @@ func (e *dctTransfer) ProcessBuiltinFunction(
 	dctTokenKey := append(e.keyPrefix, vmInput.Arguments[0]...)
 	tokenID := vmInput.Arguments[0]
 
-	err = checkIfTransferCanHappenWithLimitedTransfer(dctTokenKey, e.globalSettingsHandler, e.rolesHandler, acntSnd, acntDst, vmInput.ReturnCallAfterError)
+	keyToCheck := dctTokenKey
+	if e.flagCheckCorrectTokenID.IsSet() {
+		keyToCheck = tokenID
+	}
+
+	err = checkIfTransferCanHappenWithLimitedTransfer(keyToCheck, dctTokenKey, e.globalSettingsHandler, e.rolesHandler, acntSnd, acntDst, vmInput.ReturnCallAfterError)
 	if err != nil {
 		return nil, err
 	}
@@ -368,6 +379,7 @@ func getDCTDataFromKey(
 // by an account with transfer account
 func checkIfTransferCanHappenWithLimitedTransfer(
 	tokenID []byte,
+	dctTokenKey []byte,
 	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler,
 	roleHandler vmcommon.DCTRoleHandler,
 	acntSnd, acntDst vmcommon.UserAccountHandler,
@@ -379,7 +391,7 @@ func checkIfTransferCanHappenWithLimitedTransfer(
 	if check.IfNil(acntSnd) {
 		return nil
 	}
-	if !globalSettingsHandler.IsLimitedTransfer(tokenID) {
+	if !globalSettingsHandler.IsLimitedTransfer(dctTokenKey) {
 		return nil
 	}
 

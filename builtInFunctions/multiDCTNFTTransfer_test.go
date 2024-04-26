@@ -29,6 +29,7 @@ func createDCTNFTMultiTransferWithStubArguments() *dctNFTMultiTransfer {
 		&mock.EpochNotifierStub{},
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		0,
 		createNewDCTDataStorageHandler(),
 	)
 
@@ -88,6 +89,7 @@ func createDCTNFTMultiTransferWithMockArguments(selfShard uint32, numShards uint
 			},
 		},
 		1000,
+		0,
 		createNewDCTDataStorageHandlerWithArgs(globalSettingsHandler, accounts),
 	)
 
@@ -108,6 +110,7 @@ func TestNewDCTNFTMultiTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		&mock.EpochNotifierStub{},
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		0,
 		createNewDCTDataStorageHandler(),
 	)
 	assert.True(t, check.IfNil(multiTransfer))
@@ -124,6 +127,7 @@ func TestNewDCTNFTMultiTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		&mock.EpochNotifierStub{},
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		0,
 		createNewDCTDataStorageHandler(),
 	)
 	assert.True(t, check.IfNil(multiTransfer))
@@ -140,6 +144,7 @@ func TestNewDCTNFTMultiTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		&mock.EpochNotifierStub{},
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		0,
 		createNewDCTDataStorageHandler(),
 	)
 	assert.True(t, check.IfNil(multiTransfer))
@@ -156,6 +161,7 @@ func TestNewDCTNFTMultiTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		&mock.EpochNotifierStub{},
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		0,
 		createNewDCTDataStorageHandler(),
 	)
 	assert.True(t, check.IfNil(multiTransfer))
@@ -172,6 +178,7 @@ func TestNewDCTNFTMultiTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		nil,
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		0,
 		createNewDCTDataStorageHandler(),
 	)
 	assert.True(t, check.IfNil(multiTransfer))
@@ -188,6 +195,7 @@ func TestNewDCTNFTMultiTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		&mock.EpochNotifierStub{},
 		nil,
 		1000,
+		0,
 		createNewDCTDataStorageHandler(),
 	)
 	assert.True(t, check.IfNil(multiTransfer))
@@ -204,6 +212,7 @@ func TestNewDCTNFTMultiTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		&mock.EpochNotifierStub{},
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		0,
 		nil,
 	)
 	assert.True(t, check.IfNil(multiTransfer))
@@ -224,6 +233,7 @@ func TestNewDCTNFTMultiTransferFunc(t *testing.T) {
 		&mock.EpochNotifierStub{},
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		0,
 		createNewDCTDataStorageHandler(),
 	)
 	assert.False(t, check.IfNil(multiTransfer))

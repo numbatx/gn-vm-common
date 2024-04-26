@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"math/big"
+	"strconv"
 
 	vmcommon "github.com/numbatx/gn-vm-common"
 )
@@ -56,4 +57,8 @@ func extractTokenIdentifierAndNonceDCTWipe(args []byte) ([]byte, uint64) {
 	nonce := big.NewInt(0).SetBytes(argsSplit[1][dctRandomSequenceLength:])
 
 	return identifier, nonce.Uint64()
+}
+
+func boolToSlice(b bool) []byte {
+	return []byte(strconv.FormatBool(b))
 }

@@ -77,11 +77,11 @@ func (e *dctNFTAddUri) SetNewGasConfig(gasCost *vmcommon.GasCost) {
 	e.mutExecution.Unlock()
 }
 
-// ProcessBuiltinFunction resolves DCT NFT add quantity function call
+// ProcessBuiltinFunction resolves DCT NFT add uris function call
 // Requires 3 arguments:
 // arg0 - token identifier
 // arg1 - nonce
-// arg2 - attributes to add
+// arg[2:] - uris to add
 func (e *dctNFTAddUri) ProcessBuiltinFunction(
 	acntSnd, _ vmcommon.UserAccountHandler,
 	vmInput *vmcommon.ContractCallInput,
@@ -129,7 +129,8 @@ func (e *dctNFTAddUri) ProcessBuiltinFunction(
 		GasRemaining: vmInput.GasProvided - e.funcGasCost - gasCostForStore,
 	}
 
-	addDCTEntryInVMOutput(vmOutput, []byte(core.BuiltInFunctionDCTNFTAddURI), vmInput.Arguments[0], nonce, big.NewInt(0), vmInput.CallerAddr)
+	extraTopics := append([][]byte{vmInput.CallerAddr}, vmInput.Arguments[2:]...)
+	addDCTEntryInVMOutput(vmOutput, []byte(core.BuiltInFunctionDCTNFTAddURI), vmInput.Arguments[0], nonce, big.NewInt(0), extraTopics...)
 
 	return vmOutput, nil
 }

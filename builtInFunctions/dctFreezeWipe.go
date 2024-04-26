@@ -6,7 +6,7 @@ import (
 
 	"github.com/numbatx/gn-core/core"
 	"github.com/numbatx/gn-core/core/check"
-	"github.com/numbatx/gn-vm-common"
+	vmcommon "github.com/numbatx/gn-vm-common"
 )
 
 type dctFreezeWipe struct {
@@ -77,10 +77,8 @@ func (e *dctFreezeWipe) ProcessBuiltinFunction(
 	}
 
 	vmOutput := &vmcommon.VMOutput{ReturnCode: vmcommon.Ok}
-	if e.wipe {
-		identifier, nonce := extractTokenIdentifierAndNonceDCTWipe(vmInput.Arguments[0])
-		addDCTEntryInVMOutput(vmOutput, []byte(core.BuiltInFunctionDCTWipe), identifier, nonce, big.NewInt(0), vmInput.CallerAddr, acntDst.AddressBytes())
-	}
+	identifier, nonce := extractTokenIdentifierAndNonceDCTWipe(vmInput.Arguments[0])
+	addDCTEntryInVMOutput(vmOutput, []byte(vmInput.Function), identifier, nonce, big.NewInt(0), vmInput.CallerAddr, acntDst.AddressBytes())
 
 	return vmOutput, nil
 }

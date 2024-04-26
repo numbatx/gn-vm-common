@@ -17,7 +17,7 @@ func TestDCTTransfer_ProcessBuiltInFunctionErrors(t *testing.T) {
 	t.Parallel()
 
 	shardC := &mock.ShardCoordinatorStub{}
-	transferFunc, _ := NewDCTTransferFunc(10, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, shardC, &mock.DCTRoleHandlerStub{}, 1000, &mock.EpochNotifierStub{})
+	transferFunc, _ := NewDCTTransferFunc(10, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, shardC, &mock.DCTRoleHandlerStub{}, 1000, 0, &mock.EpochNotifierStub{})
 	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
 	_, err := transferFunc.ProcessBuiltinFunction(nil, nil, nil)
 	assert.Equal(t, err, ErrNilVmInput)
@@ -60,7 +60,7 @@ func TestDCTTransfer_ProcessBuiltInFunctionSingleShard(t *testing.T) {
 	t.Parallel()
 
 	marshalizer := &mock.MarshalizerMock{}
-	transferFunc, _ := NewDCTTransferFunc(10, marshalizer, &mock.GlobalSettingsHandlerStub{}, &mock.ShardCoordinatorStub{}, &mock.DCTRoleHandlerStub{}, 1000, &mock.EpochNotifierStub{})
+	transferFunc, _ := NewDCTTransferFunc(10, marshalizer, &mock.GlobalSettingsHandlerStub{}, &mock.ShardCoordinatorStub{}, &mock.DCTRoleHandlerStub{}, 1000, 0, &mock.EpochNotifierStub{})
 	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
 
 	input := &vmcommon.ContractCallInput{
@@ -98,7 +98,7 @@ func TestDCTTransfer_ProcessBuiltInFunctionSenderInShard(t *testing.T) {
 	t.Parallel()
 
 	marshalizer := &mock.MarshalizerMock{}
-	transferFunc, _ := NewDCTTransferFunc(10, marshalizer, &mock.GlobalSettingsHandlerStub{}, &mock.ShardCoordinatorStub{}, &mock.DCTRoleHandlerStub{}, 1000, &mock.EpochNotifierStub{})
+	transferFunc, _ := NewDCTTransferFunc(10, marshalizer, &mock.GlobalSettingsHandlerStub{}, &mock.ShardCoordinatorStub{}, &mock.DCTRoleHandlerStub{}, 1000, 0, &mock.EpochNotifierStub{})
 	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
 
 	input := &vmcommon.ContractCallInput{
@@ -128,7 +128,7 @@ func TestDCTTransfer_ProcessBuiltInFunctionDestInShard(t *testing.T) {
 	t.Parallel()
 
 	marshalizer := &mock.MarshalizerMock{}
-	transferFunc, _ := NewDCTTransferFunc(10, marshalizer, &mock.GlobalSettingsHandlerStub{}, &mock.ShardCoordinatorStub{}, &mock.DCTRoleHandlerStub{}, 1000, &mock.EpochNotifierStub{})
+	transferFunc, _ := NewDCTTransferFunc(10, marshalizer, &mock.GlobalSettingsHandlerStub{}, &mock.ShardCoordinatorStub{}, &mock.DCTRoleHandlerStub{}, 1000, 0, &mock.EpochNotifierStub{})
 	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
 
 	input := &vmcommon.ContractCallInput{
@@ -158,7 +158,7 @@ func TestDCTTransfer_SndDstFrozen(t *testing.T) {
 	marshalizer := &mock.MarshalizerMock{}
 	accountStub := &mock.AccountsStub{}
 	dctGlobalSettingsFunc, _ := NewDCTGlobalSettingsFunc(accountStub, true, core.BuiltInFunctionDCTPause, 0, &mock.EpochNotifierStub{})
-	transferFunc, _ := NewDCTTransferFunc(10, marshalizer, dctGlobalSettingsFunc, &mock.ShardCoordinatorStub{}, &mock.DCTRoleHandlerStub{}, 1000, &mock.EpochNotifierStub{})
+	transferFunc, _ := NewDCTTransferFunc(10, marshalizer, dctGlobalSettingsFunc, &mock.ShardCoordinatorStub{}, &mock.DCTRoleHandlerStub{}, 1000, 0, &mock.EpochNotifierStub{})
 	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
 
 	input := &vmcommon.ContractCallInput{
@@ -242,7 +242,7 @@ func TestDCTTransfer_SndDstWithLimitedTransfer(t *testing.T) {
 		},
 	}
 	dctGlobalSettingsFunc, _ := NewDCTGlobalSettingsFunc(accountStub, true, core.BuiltInFunctionDCTSetLimitedTransfer, 0, &mock.EpochNotifierStub{})
-	transferFunc, _ := NewDCTTransferFunc(10, marshalizer, dctGlobalSettingsFunc, &mock.ShardCoordinatorStub{}, rolesHandler, 1000, &mock.EpochNotifierStub{})
+	transferFunc, _ := NewDCTTransferFunc(10, marshalizer, dctGlobalSettingsFunc, &mock.ShardCoordinatorStub{}, rolesHandler, 1000, 0, &mock.EpochNotifierStub{})
 	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
 
 	input := &vmcommon.ContractCallInput{
@@ -293,7 +293,7 @@ func TestDCTTransfer_SndDstWithLimitedTransfer(t *testing.T) {
 
 	input.ReturnCallAfterError = false
 	rolesHandler.CheckAllowedToExecuteCalled = func(account vmcommon.UserAccountHandler, tokenID []byte, action []byte) error {
-		if bytes.Equal(account.AddressBytes(), accSnd.Address) {
+		if bytes.Equal(account.AddressBytes(), accSnd.Address) && bytes.Equal(tokenID, key) {
 			return nil
 		}
 		return ErrActionNotAllowed
@@ -303,7 +303,7 @@ func TestDCTTransfer_SndDstWithLimitedTransfer(t *testing.T) {
 	assert.Nil(t, err)
 
 	rolesHandler.CheckAllowedToExecuteCalled = func(account vmcommon.UserAccountHandler, tokenID []byte, action []byte) error {
-		if bytes.Equal(account.AddressBytes(), accDst.Address) {
+		if bytes.Equal(account.AddressBytes(), accDst.Address) && bytes.Equal(tokenID, key) {
 			return nil
 		}
 		return ErrActionNotAllowed
@@ -317,7 +317,7 @@ func TestDCTTransfer_ProcessBuiltInFunctionOnAsyncCallBack(t *testing.T) {
 	t.Parallel()
 
 	marshalizer := &mock.MarshalizerMock{}
-	transferFunc, _ := NewDCTTransferFunc(10, marshalizer, &mock.GlobalSettingsHandlerStub{}, &mock.ShardCoordinatorStub{}, &mock.DCTRoleHandlerStub{}, 1000, &mock.EpochNotifierStub{})
+	transferFunc, _ := NewDCTTransferFunc(10, marshalizer, &mock.GlobalSettingsHandlerStub{}, &mock.ShardCoordinatorStub{}, &mock.DCTRoleHandlerStub{}, 1000, 0, &mock.EpochNotifierStub{})
 	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
 
 	input := &vmcommon.ContractCallInput{

@@ -93,13 +93,13 @@ func (e *dctGlobalSettings) ProcessBuiltinFunction(
 	return vmOutput, nil
 }
 
-func (e *dctGlobalSettings) toggleSetting(token []byte) error {
+func (e *dctGlobalSettings) toggleSetting(dctTokenKey []byte) error {
 	systemSCAccount, err := e.getSystemAccount()
 	if err != nil {
 		return err
 	}
 
-	dctMetaData, err := e.getGlobalMetadata(token)
+	dctMetaData, err := e.getGlobalMetadata(dctTokenKey)
 	if err != nil {
 		return err
 	}
@@ -113,7 +113,7 @@ func (e *dctGlobalSettings) toggleSetting(token []byte) error {
 		break
 	}
 
-	err = systemSCAccount.AccountDataHandler().SaveKeyValue(token, dctMetaData.ToBytes())
+	err = systemSCAccount.AccountDataHandler().SaveKeyValue(dctTokenKey, dctMetaData.ToBytes())
 	if err != nil {
 		return err
 	}
@@ -135,9 +135,9 @@ func (e *dctGlobalSettings) getSystemAccount() (vmcommon.UserAccountHandler, err
 	return userAcc, nil
 }
 
-// IsPaused returns true if the token is paused
-func (e *dctGlobalSettings) IsPaused(tokenKey []byte) bool {
-	dctMetadata, err := e.getGlobalMetadata(tokenKey)
+// IsPaused returns true if the dctTokenKey (prefixed) is paused
+func (e *dctGlobalSettings) IsPaused(dctTokenKey []byte) bool {
+	dctMetadata, err := e.getGlobalMetadata(dctTokenKey)
 	if err != nil {
 		return false
 	}
@@ -145,9 +145,9 @@ func (e *dctGlobalSettings) IsPaused(tokenKey []byte) bool {
 	return dctMetadata.Paused
 }
 
-// IsLimitedTransfer returns true if the token is with limited transfer
-func (e *dctGlobalSettings) IsLimitedTransfer(tokenKey []byte) bool {
-	dctMetadata, err := e.getGlobalMetadata(tokenKey)
+// IsLimitedTransfer returns true if the dctTokenKey (prefixed) is with limited transfer
+func (e *dctGlobalSettings) IsLimitedTransfer(dctTokenKey []byte) bool {
+	dctMetadata, err := e.getGlobalMetadata(dctTokenKey)
 	if err != nil {
 		return false
 	}
@@ -155,13 +155,13 @@ func (e *dctGlobalSettings) IsLimitedTransfer(tokenKey []byte) bool {
 	return dctMetadata.LimitedTransfer
 }
 
-func (e *dctGlobalSettings) getGlobalMetadata(tokenKey []byte) (*DCTGlobalMetadata, error) {
+func (e *dctGlobalSettings) getGlobalMetadata(dctTokenKey []byte) (*DCTGlobalMetadata, error) {
 	systemSCAccount, err := e.getSystemAccount()
 	if err != nil {
 		return nil, err
 	}
 
-	val, _ := systemSCAccount.AccountDataHandler().RetrieveValue(tokenKey)
+	val, _ := systemSCAccount.AccountDataHandler().RetrieveValue(dctTokenKey)
 	dctMetaData := DCTGlobalMetadataFromBytes(val)
 	return &dctMetaData, nil
 }
