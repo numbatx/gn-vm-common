@@ -19,6 +19,33 @@ func TestDCTGlobalMetaData_ToBytesWhenPaused(t *testing.T) {
 	require.Equal(t, expected, actual)
 }
 
+func TestDCTGlobalMetaData_ToBytesWhenTransfer(t *testing.T) {
+	t.Parallel()
+
+	dctMetaData := &DCTGlobalMetadata{
+		LimitedTransfer: true,
+	}
+
+	expected := make([]byte, lengthOfDCTMetadata)
+	expected[0] = 2
+	actual := dctMetaData.ToBytes()
+	require.Equal(t, expected, actual)
+}
+
+func TestDCTGlobalMetaData_ToBytesWhenTransferAndPause(t *testing.T) {
+	t.Parallel()
+
+	dctMetaData := &DCTGlobalMetadata{
+		Paused:          true,
+		LimitedTransfer: true,
+	}
+
+	expected := make([]byte, lengthOfDCTMetadata)
+	expected[0] = 3
+	actual := dctMetaData.ToBytes()
+	require.Equal(t, expected, actual)
+}
+
 func TestDCTGlobalMetaData_ToBytesWhenNotPaused(t *testing.T) {
 	t.Parallel()
 
@@ -118,4 +145,15 @@ func TestDCTUserMetadataFromBytes_ShouldSetFrozenToFalse(t *testing.T) {
 
 	result := DCTUserMetadataFromBytes(input)
 	require.False(t, result.Frozen)
+}
+
+func TestDCTGlobalMetadata_FromBytes(t *testing.T) {
+	require.True(t, DCTGlobalMetadataFromBytes([]byte{1, 0}).Paused)
+	require.False(t, DCTGlobalMetadataFromBytes([]byte{1, 0}).LimitedTransfer)
+	require.True(t, DCTGlobalMetadataFromBytes([]byte{2, 0}).LimitedTransfer)
+	require.False(t, DCTGlobalMetadataFromBytes([]byte{2, 0}).Paused)
+	require.False(t, DCTGlobalMetadataFromBytes([]byte{0, 0}).LimitedTransfer)
+	require.False(t, DCTGlobalMetadataFromBytes([]byte{0, 0}).Paused)
+	require.True(t, DCTGlobalMetadataFromBytes([]byte{3, 0}).Paused)
+	require.True(t, DCTGlobalMetadataFromBytes([]byte{3, 0}).LimitedTransfer)
 }

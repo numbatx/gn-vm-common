@@ -8,38 +8,47 @@ import (
 	"math/big"
 	"sync"
 
+	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/core/check"
+	"github.com/numbatx/gn-core/data/dct"
+	"github.com/numbatx/gn-core/data/vm"
 	"github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/check"
-	"github.com/numbatx/gn-vm-common/data/dct"
+	"github.com/numbatx/gn-vm-common/atomic"
 )
 
 type dctNFTTransfer struct {
 	baseAlwaysActive
-	keyPrefix        []byte
-	marshalizer      vmcommon.Marshalizer
-	pauseHandler     vmcommon.DCTPauseHandler
-	payableHandler   vmcommon.PayableHandler
-	funcGasCost      uint64
-	accounts         vmcommon.AccountsAdapter
-	shardCoordinator vmcommon.Coordinator
-	gasConfig        vmcommon.BaseOperationCost
-	mutExecution     sync.RWMutex
+	keyPrefix                 []byte
+	marshalizer               vmcommon.Marshalizer
+	globalSettingsHandler     vmcommon.DCTGlobalSettingsHandler
+	payableHandler            vmcommon.PayableHandler
+	funcGasCost               uint64
+	accounts                  vmcommon.AccountsAdapter
+	shardCoordinator          vmcommon.Coordinator
+	gasConfig                 vmcommon.BaseOperationCost
+	mutExecution              sync.RWMutex
+	rolesHandler              vmcommon.DCTRoleHandler
+	transferToMetaEnableEpoch uint32
+	flagTransferToMeta        atomic.Flag
 }
 
 // NewDCTNFTTransferFunc returns the dct NFT transfer built-in function component
 func NewDCTNFTTransferFunc(
 	funcGasCost uint64,
 	marshalizer vmcommon.Marshalizer,
-	pauseHandler vmcommon.DCTPauseHandler,
+	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler,
 	accounts vmcommon.AccountsAdapter,
 	shardCoordinator vmcommon.Coordinator,
 	gasConfig vmcommon.BaseOperationCost,
+	rolesHandler vmcommon.DCTRoleHandler,
+	transferToMetaEnableEpoch uint32,
+	epochNotifier vmcommon.EpochNotifier,
 ) (*dctNFTTransfer, error) {
 	if check.IfNil(marshalizer) {
 		return nil, ErrNilMarshalizer
 	}
-	if check.IfNil(pauseHandler) {
-		return nil, ErrNilPauseHandler
+	if check.IfNil(globalSettingsHandler) {
+		return nil, ErrNilGlobalSettingsHandler
 	}
 	if check.IfNil(accounts) {
 		return nil, ErrNilAccountsAdapter
@@ -47,20 +56,36 @@ func NewDCTNFTTransferFunc(
 	if check.IfNil(shardCoordinator) {
 		return nil, ErrNilShardCoordinator
 	}
-
-	e := &dctNFTTransfer{
-		keyPrefix:        []byte(vmcommon.NumbatProtectedKeyPrefix + vmcommon.DCTKeyIdentifier),
-		marshalizer:      marshalizer,
-		pauseHandler:     pauseHandler,
-		funcGasCost:      funcGasCost,
-		accounts:         accounts,
-		shardCoordinator: shardCoordinator,
-		gasConfig:        gasConfig,
-		mutExecution:     sync.RWMutex{},
-		payableHandler:   &disabledPayableHandler{},
+	if check.IfNil(rolesHandler) {
+		return nil, ErrNilRolesHandler
+	}
+	if check.IfNil(epochNotifier) {
+		return nil, ErrNilEpochHandler
 	}
 
+	e := &dctNFTTransfer{
+		keyPrefix:                 []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
+		marshalizer:               marshalizer,
+		globalSettingsHandler:     globalSettingsHandler,
+		funcGasCost:               funcGasCost,
+		accounts:                  accounts,
+		shardCoordinator:          shardCoordinator,
+		gasConfig:                 gasConfig,
+		mutExecution:              sync.RWMutex{},
+		payableHandler:            &disabledPayableHandler{},
+		rolesHandler:              rolesHandler,
+		transferToMetaEnableEpoch: transferToMetaEnableEpoch,
+	}
+
+	epochNotifier.RegisterNotifyHandler(e)
+
 	return e, nil
+}
+
+// EpochConfirmed is called whenever a new epoch is confirmed
+func (e *dctNFTTransfer) EpochConfirmed(epoch uint32, _ uint64) {
+	e.flagTransferToMeta.Toggle(epoch >= e.transferToMetaEnableEpoch)
+	log.Debug("DCT NFT transfer to metachain flag", "enabled", e.flagTransferToMeta.IsSet())
 }
 
 // SetPayableHandler will set the payable handler to the function
@@ -127,22 +152,22 @@ func (e *dctNFTTransfer) ProcessBuiltinFunction(
 		return nil, err
 	}
 
-	err = e.addNFTToDestination(vmInput.RecipientAddr, acntDst, dctTransferData, dctTokenKey, mustVerifyPayable(vmInput, vmcommon.MinLenArgumentsDCTNFTTransfer), vmInput.ReturnCallAfterError)
+	err = e.addNFTToDestination(vmInput.RecipientAddr, acntDst, dctTransferData, dctTokenKey, mustVerifyPayable(vmInput, core.MinLenArgumentsDCTNFTTransfer), vmInput.ReturnCallAfterError)
 	if err != nil {
 		return nil, err
 	}
 
 	// no need to consume gas on destination - sender already paid for it
 	vmOutput := &vmcommon.VMOutput{GasRemaining: vmInput.GasProvided}
-	if len(vmInput.Arguments) > vmcommon.MinLenArgumentsDCTNFTTransfer && vmcommon.IsSmartContractAddress(vmInput.RecipientAddr) {
+	if len(vmInput.Arguments) > core.MinLenArgumentsDCTNFTTransfer && vmcommon.IsSmartContractAddress(vmInput.RecipientAddr) {
 		var callArgs [][]byte
-		if len(vmInput.Arguments) > vmcommon.MinLenArgumentsDCTNFTTransfer+1 {
-			callArgs = vmInput.Arguments[vmcommon.MinLenArgumentsDCTNFTTransfer+1:]
+		if len(vmInput.Arguments) > core.MinLenArgumentsDCTNFTTransfer+1 {
+			callArgs = vmInput.Arguments[core.MinLenArgumentsDCTNFTTransfer+1:]
 		}
 
 		addOutputTransferToVMOutput(
 			vmInput.CallerAddr,
-			string(vmInput.Arguments[vmcommon.MinLenArgumentsDCTNFTTransfer]),
+			string(vmInput.Arguments[core.MinLenArgumentsDCTNFTTransfer]),
 			callArgs,
 			vmInput.RecipientAddr,
 			vmInput.GasLocked,
@@ -151,9 +176,8 @@ func (e *dctNFTTransfer) ProcessBuiltinFunction(
 	}
 
 	tokenNonce := dctTransferData.TokenMetaData.Nonce
-	logEntry := newEntryForNFT(vmcommon.BuiltInFunctionDCTNFTTransfer, vmInput.CallerAddr, vmInput.Arguments[0], tokenNonce)
-	logEntry.Topics = append(logEntry.Topics, acntDst.AddressBytes())
-	vmOutput.Logs = []*vmcommon.LogEntry{logEntry}
+
+	addDCTEntryInVMOutput(vmOutput, []byte(core.BuiltInFunctionDCTNFTTransfer), vmInput.Arguments[0], tokenNonce, dctTransferData.Value, vmInput.CallerAddr, acntDst.AddressBytes())
 
 	return vmOutput, nil
 }
@@ -169,7 +193,8 @@ func (e *dctNFTTransfer) processNFTTransferOnSenderShard(
 	if bytes.Equal(dstAddress, vmInput.CallerAddr) {
 		return nil, fmt.Errorf("%w, can not transfer to self", ErrInvalidArguments)
 	}
-	if e.shardCoordinator.ComputeId(dstAddress) == vmcommon.MetachainShardId {
+	isInvalidTransferToMeta := e.shardCoordinator.ComputeId(dstAddress) == core.MetachainShardId && !e.flagTransferToMeta.IsSet()
+	if isInvalidTransferToMeta {
 		return nil, ErrInvalidRcvAddr
 	}
 	if vmInput.GasProvided < e.funcGasCost {
@@ -178,12 +203,12 @@ func (e *dctNFTTransfer) processNFTTransferOnSenderShard(
 
 	dctTokenKey := append(e.keyPrefix, vmInput.Arguments[0]...)
 	nonce := big.NewInt(0).SetBytes(vmInput.Arguments[1]).Uint64()
-	if nonce == 0 {
-		return nil, ErrNFTDoesNotHaveMetadata
-	}
 	dctData, err := getDCTNFTTokenOnSender(acntSnd, dctTokenKey, nonce, e.marshalizer)
 	if err != nil {
 		return nil, err
+	}
+	if nonce == 0 {
+		return nil, ErrNFTDoesNotHaveMetadata
 	}
 
 	quantityToTransfer := big.NewInt(0).SetBytes(vmInput.Arguments[2])
@@ -192,24 +217,27 @@ func (e *dctNFTTransfer) processNFTTransferOnSenderShard(
 	}
 	dctData.Value.Sub(dctData.Value, quantityToTransfer)
 
-	_, err = saveDCTNFTToken(acntSnd, dctTokenKey, dctData, e.marshalizer, e.pauseHandler, vmInput.ReturnCallAfterError)
+	_, err = saveDCTNFTToken(acntSnd, dctTokenKey, dctData, e.marshalizer, e.globalSettingsHandler, vmInput.ReturnCallAfterError)
 	if err != nil {
 		return nil, err
 	}
 
 	dctData.Value.Set(quantityToTransfer)
 
+	var userAccount vmcommon.UserAccountHandler
 	if e.shardCoordinator.SelfId() == e.shardCoordinator.ComputeId(dstAddress) {
 		accountHandler, errLoad := e.accounts.LoadAccount(dstAddress)
 		if errLoad != nil {
 			return nil, errLoad
 		}
-		userAccount, ok := accountHandler.(vmcommon.UserAccountHandler)
+
+		var ok bool
+		userAccount, ok = accountHandler.(vmcommon.UserAccountHandler)
 		if !ok {
 			return nil, ErrWrongTypeAssertion
 		}
 
-		err = e.addNFTToDestination(dstAddress, userAccount, dctData, dctTokenKey, mustVerifyPayable(vmInput, vmcommon.MinLenArgumentsDCTNFTTransfer), vmInput.ReturnCallAfterError)
+		err = e.addNFTToDestination(dstAddress, userAccount, dctData, dctTokenKey, mustVerifyPayable(vmInput, core.MinLenArgumentsDCTNFTTransfer), vmInput.ReturnCallAfterError)
 		if err != nil {
 			return nil, err
 		}
@@ -218,6 +246,11 @@ func (e *dctNFTTransfer) processNFTTransferOnSenderShard(
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	err = checkIfTransferCanHappenWithLimitedTransfer(dctTokenKey, e.globalSettingsHandler, e.rolesHandler, acntSnd, userAccount, vmInput.ReturnCallAfterError)
+	if err != nil {
+		return nil, err
 	}
 
 	vmOutput := &vmcommon.VMOutput{
@@ -230,9 +263,7 @@ func (e *dctNFTTransfer) processNFTTransferOnSenderShard(
 	}
 
 	tokenNonce := dctData.TokenMetaData.Nonce
-	logEntry := newEntryForNFT(vmcommon.BuiltInFunctionDCTNFTTransfer, vmInput.CallerAddr, vmInput.Arguments[0], tokenNonce)
-	logEntry.Topics = append(logEntry.Topics, dstAddress)
-	vmOutput.Logs = []*vmcommon.LogEntry{logEntry}
+	addDCTEntryInVMOutput(vmOutput, []byte(core.BuiltInFunctionDCTNFTTransfer), vmInput.Arguments[0], tokenNonce, quantityToTransfer, vmInput.CallerAddr, dstAddress)
 
 	return vmOutput, nil
 }
@@ -257,11 +288,11 @@ func (e *dctNFTTransfer) createNFTOutputTransfers(
 	nftTransferCallArgs := make([][]byte, 0)
 	nftTransferCallArgs = append(nftTransferCallArgs, vmInput.Arguments[:3]...)
 	nftTransferCallArgs = append(nftTransferCallArgs, marshaledNFTTransfer)
-	if len(vmInput.Arguments) > vmcommon.MinLenArgumentsDCTNFTTransfer {
+	if len(vmInput.Arguments) > core.MinLenArgumentsDCTNFTTransfer {
 		nftTransferCallArgs = append(nftTransferCallArgs, vmInput.Arguments[4:]...)
 	}
 
-	isSCCallAfter := len(vmInput.Arguments) > vmcommon.MinLenArgumentsDCTNFTTransfer && vmcommon.IsSmartContractAddress(dstAddress)
+	isSCCallAfter := len(vmInput.Arguments) > core.MinLenArgumentsDCTNFTTransfer && vmcommon.IsSmartContractAddress(dstAddress)
 
 	if e.shardCoordinator.SelfId() != e.shardCoordinator.ComputeId(dstAddress) {
 		gasToTransfer := uint64(0)
@@ -272,7 +303,7 @@ func (e *dctNFTTransfer) createNFTOutputTransfers(
 		addNFTTransferToVMOutput(
 			vmInput.CallerAddr,
 			dstAddress,
-			vmcommon.BuiltInFunctionDCTNFTTransfer,
+			core.BuiltInFunctionDCTNFTTransfer,
 			nftTransferCallArgs,
 			vmInput.GasLocked,
 			gasToTransfer,
@@ -285,13 +316,13 @@ func (e *dctNFTTransfer) createNFTOutputTransfers(
 
 	if isSCCallAfter {
 		var callArgs [][]byte
-		if len(vmInput.Arguments) > vmcommon.MinLenArgumentsDCTNFTTransfer+1 {
-			callArgs = vmInput.Arguments[vmcommon.MinLenArgumentsDCTNFTTransfer+1:]
+		if len(vmInput.Arguments) > core.MinLenArgumentsDCTNFTTransfer+1 {
+			callArgs = vmInput.Arguments[core.MinLenArgumentsDCTNFTTransfer+1:]
 		}
 
 		addOutputTransferToVMOutput(
 			vmInput.CallerAddr,
-			string(vmInput.Arguments[vmcommon.MinLenArgumentsDCTNFTTransfer]),
+			string(vmInput.Arguments[core.MinLenArgumentsDCTNFTTransfer]),
 			callArgs,
 			dstAddress,
 			vmInput.GasLocked,
@@ -329,7 +360,7 @@ func (e *dctNFTTransfer) addNFTToDestination(
 	if err != nil && !errors.Is(err, ErrNFTTokenDoesNotExist) {
 		return err
 	}
-	err = checkFrozeAndPause(dstAddress, dctTokenKey, currentDCTData, e.pauseHandler, isReturnWithError)
+	err = checkFrozeAndPause(dstAddress, dctTokenKey, currentDCTData, e.globalSettingsHandler, isReturnWithError)
 	if err != nil {
 		return err
 	}
@@ -341,7 +372,7 @@ func (e *dctNFTTransfer) addNFTToDestination(
 	}
 	dctDataToTransfer.Value.Add(dctDataToTransfer.Value, currentDCTData.Value)
 
-	_, err = saveDCTNFTToken(userAccount, dctTokenKey, dctDataToTransfer, e.marshalizer, e.pauseHandler, isReturnWithError)
+	_, err = saveDCTNFTToken(userAccount, dctTokenKey, dctDataToTransfer, e.marshalizer, e.globalSettingsHandler, isReturnWithError)
 	if err != nil {
 		return err
 	}
@@ -356,7 +387,7 @@ func addNFTTransferToVMOutput(
 	arguments [][]byte,
 	gasLocked uint64,
 	gasLimit uint64,
-	callType vmcommon.CallType,
+	callType vm.CallType,
 	vmOutput *vmcommon.VMOutput,
 ) {
 	nftTransferTxData := funcToCall

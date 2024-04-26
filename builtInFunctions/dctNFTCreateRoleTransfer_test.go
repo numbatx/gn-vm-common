@@ -5,8 +5,9 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/data/dct"
 	"github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/data/dct"
 	"github.com/numbatx/gn-vm-common/mock"
 	"github.com/stretchr/testify/assert"
 )
@@ -67,7 +68,7 @@ func TestDCTNFTCreateRoleTransfer_ProcessWithErrors(t *testing.T) {
 	assert.Equal(t, err, ErrNilUserAccount)
 	assert.Nil(t, vmOutput)
 
-	vmInput.CallerAddr = vmcommon.DCTSCAddress
+	vmInput.CallerAddr = core.DCTSCAddress
 	vmInput.Arguments = [][]byte{{1}, {2}, {3}}
 	vmOutput, err = e.ProcessBuiltinFunction(nil, &mock.UserAccountStub{}, vmInput)
 	assert.Equal(t, err, ErrInvalidArguments)
@@ -116,14 +117,14 @@ func TestDCTNFTCreateRoleTransfer_ProcessAtCurrentShard(t *testing.T) {
 	destinationAddr := bytes.Repeat([]byte{2}, 32)
 	vmInput := &vmcommon.ContractCallInput{}
 	vmInput.CallValue = big.NewInt(0)
-	vmInput.CallerAddr = vmcommon.DCTSCAddress
+	vmInput.CallerAddr = core.DCTSCAddress
 	vmInput.Arguments = [][]byte{tokenID, destinationAddr}
 
 	destAcc, _ := e.accounts.LoadAccount(currentOwner)
 	userAcc := destAcc.(vmcommon.UserAccountHandler)
 
 	dctTokenRoleKey := append(roleKeyPrefix, tokenID...)
-	err := saveRolesToAccount(userAcc, dctTokenRoleKey, &dct.DCTRoles{Roles: [][]byte{[]byte(vmcommon.DCTRoleNFTCreate), []byte(vmcommon.DCTRoleNFTAddQuantity)}}, e.marshalizer)
+	err := saveRolesToAccount(userAcc, dctTokenRoleKey, &dct.DCTRoles{Roles: [][]byte{[]byte(core.DCTRoleNFTCreate), []byte(core.DCTRoleNFTAddQuantity)}}, e.marshalizer)
 	assert.Nil(t, err)
 	_ = saveLatestNonce(userAcc, tokenID, 100)
 	_ = e.accounts.SaveAccount(userAcc)
@@ -199,6 +200,6 @@ func checkNFTCreateRoleExists(t *testing.T, e *dctNFTCreateRoleTransfer, addr []
 	dctTokenRoleKey := append(roleKeyPrefix, tokenID...)
 	roles, _, _ := getDCTRolesForAcnt(e.marshalizer, userAcc, dctTokenRoleKey)
 	assert.Equal(t, 1, len(roles.Roles))
-	index, _ := doesRoleExist(roles, []byte(vmcommon.DCTRoleNFTCreate))
+	index, _ := doesRoleExist(roles, []byte(core.DCTRoleNFTCreate))
 	assert.Equal(t, expectedIndex, index)
 }

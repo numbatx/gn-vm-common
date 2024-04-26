@@ -6,9 +6,10 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/core/check"
+	"github.com/numbatx/gn-core/data/dct"
 	"github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/check"
-	"github.com/numbatx/gn-vm-common/data/dct"
 	"github.com/numbatx/gn-vm-common/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,7 +20,7 @@ func createNftCreateWithStubArguments() *dctNFTCreate {
 		1,
 		vmcommon.BaseOperationCost{},
 		&mock.MarshalizerMock{},
-		&mock.PauseHandlerStub{},
+		&mock.GlobalSettingsHandlerStub{},
 		&mock.DCTRoleHandlerStub{},
 	)
 
@@ -33,7 +34,7 @@ func TestNewDCTNFTCreateFunc_NilArgumentsShouldErr(t *testing.T) {
 		0,
 		vmcommon.BaseOperationCost{},
 		nil,
-		&mock.PauseHandlerStub{},
+		&mock.GlobalSettingsHandlerStub{},
 		&mock.DCTRoleHandlerStub{},
 	)
 	assert.True(t, check.IfNil(nftCreate))
@@ -47,13 +48,13 @@ func TestNewDCTNFTCreateFunc_NilArgumentsShouldErr(t *testing.T) {
 		&mock.DCTRoleHandlerStub{},
 	)
 	assert.True(t, check.IfNil(nftCreate))
-	assert.Equal(t, ErrNilPauseHandler, err)
+	assert.Equal(t, ErrNilGlobalSettingsHandler, err)
 
 	nftCreate, err = NewDCTNFTCreateFunc(
 		0,
 		vmcommon.BaseOperationCost{},
 		&mock.MarshalizerMock{},
-		&mock.PauseHandlerStub{},
+		&mock.GlobalSettingsHandlerStub{},
 		nil,
 	)
 	assert.True(t, check.IfNil(nftCreate))
@@ -67,7 +68,7 @@ func TestNewDCTNFTCreateFunc(t *testing.T) {
 		0,
 		vmcommon.BaseOperationCost{},
 		&mock.MarshalizerMock{},
-		&mock.PauseHandlerStub{},
+		&mock.GlobalSettingsHandlerStub{},
 		&mock.DCTRoleHandlerStub{},
 	)
 	assert.False(t, check.IfNil(nftCreate))
@@ -155,7 +156,7 @@ func TestDctNFTCreate_ProcessBuiltinFunctionNotAllowedToExecute(t *testing.T) {
 		0,
 		vmcommon.BaseOperationCost{},
 		&mock.MarshalizerMock{},
-		&mock.PauseHandlerStub{},
+		&mock.GlobalSettingsHandlerStub{},
 		&mock.DCTRoleHandlerStub{
 			CheckAllowedToExecuteCalled: func(account vmcommon.UserAccountHandler, tokenID []byte, action []byte) error {
 				return expectedErr
@@ -183,7 +184,7 @@ func TestDctNFTCreate_ProcessBuiltinFunctionShouldWork(t *testing.T) {
 		0,
 		vmcommon.BaseOperationCost{},
 		&mock.MarshalizerMock{},
-		&mock.PauseHandlerStub{},
+		&mock.GlobalSettingsHandlerStub{},
 		&mock.DCTRoleHandlerStub{},
 	)
 	address := bytes.Repeat([]byte{1}, 32)
@@ -223,7 +224,7 @@ func TestDctNFTCreate_ProcessBuiltinFunctionShouldWork(t *testing.T) {
 	createdDct, latestNonce := readNFTData(t, sender, nftCreate.marshalizer, []byte(token), 1, address)
 	assert.Equal(t, uint64(1), latestNonce)
 	expectedDct := &dct.DCToken{
-		Type:       uint32(vmcommon.NonFungible),
+		Type:       uint32(core.NonFungible),
 		Value:      quantity,
 		Properties: nil,
 		TokenMetaData: &dct.MetaData{
@@ -245,7 +246,7 @@ func readNFTData(t *testing.T, account vmcommon.UserAccountHandler, marshalizer 
 	require.Nil(t, err)
 	latestNonce := big.NewInt(0).SetBytes(latestNonceBytes).Uint64()
 
-	createdTokenID := []byte(vmcommon.NumbatProtectedKeyPrefix + vmcommon.DCTKeyIdentifier)
+	createdTokenID := []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier)
 	createdTokenID = append(createdTokenID, tokenID...)
 	tokenKey := computeDCTNFTTokenKey(createdTokenID, nonce)
 	data, err := account.(vmcommon.UserAccountHandler).AccountDataHandler().RetrieveValue(tokenKey)

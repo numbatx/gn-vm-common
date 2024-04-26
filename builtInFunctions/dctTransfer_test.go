@@ -5,8 +5,10 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/data/dct"
+	"github.com/numbatx/gn-core/data/vm"
 	"github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/data/dct"
 	"github.com/numbatx/gn-vm-common/mock"
 	"github.com/stretchr/testify/assert"
 )
@@ -15,7 +17,7 @@ func TestDCTTransfer_ProcessBuiltInFunctionErrors(t *testing.T) {
 	t.Parallel()
 
 	shardC := &mock.ShardCoordinatorStub{}
-	transferFunc, _ := NewDCTTransferFunc(10, &mock.MarshalizerMock{}, &mock.PauseHandlerStub{}, shardC)
+	transferFunc, _ := NewDCTTransferFunc(10, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, shardC, &mock.DCTRoleHandlerStub{}, 1000, &mock.EpochNotifierStub{})
 	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
 	_, err := transferFunc.ProcessBuiltinFunction(nil, nil, nil)
 	assert.Equal(t, err, ErrNilVmInput)
@@ -46,9 +48,9 @@ func TestDCTTransfer_ProcessBuiltInFunctionErrors(t *testing.T) {
 	assert.Equal(t, err, ErrNotEnoughGas)
 
 	input.GasProvided = transferFunc.funcGasCost
-	input.RecipientAddr = vmcommon.DCTSCAddress
+	input.RecipientAddr = core.DCTSCAddress
 	shardC.ComputeIdCalled = func(address []byte) uint32 {
-		return vmcommon.MetachainShardId
+		return core.MetachainShardId
 	}
 	_, err = transferFunc.ProcessBuiltinFunction(accSnd, nil, input)
 	assert.Equal(t, err, ErrInvalidRcvAddr)
@@ -58,7 +60,7 @@ func TestDCTTransfer_ProcessBuiltInFunctionSingleShard(t *testing.T) {
 	t.Parallel()
 
 	marshalizer := &mock.MarshalizerMock{}
-	transferFunc, _ := NewDCTTransferFunc(10, marshalizer, &mock.PauseHandlerStub{}, &mock.ShardCoordinatorStub{})
+	transferFunc, _ := NewDCTTransferFunc(10, marshalizer, &mock.GlobalSettingsHandlerStub{}, &mock.ShardCoordinatorStub{}, &mock.DCTRoleHandlerStub{}, 1000, &mock.EpochNotifierStub{})
 	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
 
 	input := &vmcommon.ContractCallInput{
@@ -96,7 +98,7 @@ func TestDCTTransfer_ProcessBuiltInFunctionSenderInShard(t *testing.T) {
 	t.Parallel()
 
 	marshalizer := &mock.MarshalizerMock{}
-	transferFunc, _ := NewDCTTransferFunc(10, marshalizer, &mock.PauseHandlerStub{}, &mock.ShardCoordinatorStub{})
+	transferFunc, _ := NewDCTTransferFunc(10, marshalizer, &mock.GlobalSettingsHandlerStub{}, &mock.ShardCoordinatorStub{}, &mock.DCTRoleHandlerStub{}, 1000, &mock.EpochNotifierStub{})
 	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
 
 	input := &vmcommon.ContractCallInput{
@@ -126,7 +128,7 @@ func TestDCTTransfer_ProcessBuiltInFunctionDestInShard(t *testing.T) {
 	t.Parallel()
 
 	marshalizer := &mock.MarshalizerMock{}
-	transferFunc, _ := NewDCTTransferFunc(10, marshalizer, &mock.PauseHandlerStub{}, &mock.ShardCoordinatorStub{})
+	transferFunc, _ := NewDCTTransferFunc(10, marshalizer, &mock.GlobalSettingsHandlerStub{}, &mock.ShardCoordinatorStub{}, &mock.DCTRoleHandlerStub{}, 1000, &mock.EpochNotifierStub{})
 	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
 
 	input := &vmcommon.ContractCallInput{
@@ -155,8 +157,8 @@ func TestDCTTransfer_SndDstFrozen(t *testing.T) {
 
 	marshalizer := &mock.MarshalizerMock{}
 	accountStub := &mock.AccountsStub{}
-	dctPauseFunc, _ := NewDCTPauseFunc(accountStub, true)
-	transferFunc, _ := NewDCTTransferFunc(10, marshalizer, dctPauseFunc, &mock.ShardCoordinatorStub{})
+	dctGlobalSettingsFunc, _ := NewDCTGlobalSettingsFunc(accountStub, true, core.BuiltInFunctionDCTPause, 0, &mock.EpochNotifierStub{})
+	transferFunc, _ := NewDCTTransferFunc(10, marshalizer, dctGlobalSettingsFunc, &mock.ShardCoordinatorStub{}, &mock.DCTRoleHandlerStub{}, 1000, &mock.EpochNotifierStub{})
 	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
 
 	input := &vmcommon.ContractCallInput{
@@ -207,7 +209,7 @@ func TestDCTTransfer_SndDstFrozen(t *testing.T) {
 
 	systemAccount := mock.NewUserAccount(vmcommon.SystemAccountAddress)
 	dctGlobal := DCTGlobalMetadata{Paused: true}
-	pauseKey := []byte(vmcommon.NumbatProtectedKeyPrefix + vmcommon.DCTKeyIdentifier + string(key))
+	pauseKey := []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier + string(key))
 	_ = systemAccount.AccountDataHandler().SaveKeyValue(pauseKey, dctGlobal.ToBytes())
 
 	accountStub.LoadAccountCalled = func(address []byte) (vmcommon.AccountHandler, error) {
@@ -226,25 +228,110 @@ func TestDCTTransfer_SndDstFrozen(t *testing.T) {
 	assert.Nil(t, err)
 }
 
-func TestDCTTransfer_ProcessBuiltInFunctionOnAsyncCallBack(t *testing.T) {
+func TestDCTTransfer_SndDstWithLimitedTransfer(t *testing.T) {
 	t.Parallel()
 
 	marshalizer := &mock.MarshalizerMock{}
-	transferFunc, _ := NewDCTTransferFunc(10, marshalizer, &mock.PauseHandlerStub{}, &mock.ShardCoordinatorStub{})
+	accountStub := &mock.AccountsStub{}
+	rolesHandler := &mock.DCTRoleHandlerStub{
+		CheckAllowedToExecuteCalled: func(account vmcommon.UserAccountHandler, tokenID []byte, action []byte) error {
+			if bytes.Equal(action, []byte(core.DCTRoleTransfer)) {
+				return ErrActionNotAllowed
+			}
+			return nil
+		},
+	}
+	dctGlobalSettingsFunc, _ := NewDCTGlobalSettingsFunc(accountStub, true, core.BuiltInFunctionDCTSetLimitedTransfer, 0, &mock.EpochNotifierStub{})
+	transferFunc, _ := NewDCTTransferFunc(10, marshalizer, dctGlobalSettingsFunc, &mock.ShardCoordinatorStub{}, rolesHandler, 1000, &mock.EpochNotifierStub{})
 	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
 
 	input := &vmcommon.ContractCallInput{
 		VMInput: vmcommon.VMInput{
 			GasProvided: 50,
 			CallValue:   big.NewInt(0),
-			CallType:    vmcommon.AsynchronousCallBack,
 		},
 	}
 	key := []byte("key")
 	value := big.NewInt(10).Bytes()
 	input.Arguments = [][]byte{key, value}
 	accSnd := mock.NewUserAccount([]byte("snd"))
-	accDst := mock.NewUserAccount(vmcommon.DCTSCAddress)
+	accDst := mock.NewUserAccount([]byte("dst"))
+
+	dctKey := append(transferFunc.keyPrefix, key...)
+	dctToken := &dct.DCToken{Value: big.NewInt(100)}
+	marshaledData, _ := marshalizer.Marshal(dctToken)
+	_ = accSnd.AccountDataHandler().SaveKeyValue(dctKey, marshaledData)
+
+	dctToken = &dct.DCToken{Value: big.NewInt(100)}
+	marshaledData, _ = marshalizer.Marshal(dctToken)
+	_ = accDst.AccountDataHandler().SaveKeyValue(dctKey, marshaledData)
+
+	systemAccount := mock.NewUserAccount(vmcommon.SystemAccountAddress)
+	dctGlobal := DCTGlobalMetadata{LimitedTransfer: true}
+	pauseKey := []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier + string(key))
+	_ = systemAccount.AccountDataHandler().SaveKeyValue(pauseKey, dctGlobal.ToBytes())
+
+	accountStub.LoadAccountCalled = func(address []byte) (vmcommon.AccountHandler, error) {
+		if bytes.Equal(address, vmcommon.SystemAccountAddress) {
+			return systemAccount, nil
+		}
+		return accDst, nil
+	}
+
+	_, err := transferFunc.ProcessBuiltinFunction(nil, accDst, input)
+	assert.Nil(t, err)
+
+	_, err = transferFunc.ProcessBuiltinFunction(accSnd, accDst, input)
+	assert.Equal(t, err, ErrActionNotAllowed)
+
+	_, err = transferFunc.ProcessBuiltinFunction(accSnd, nil, input)
+	assert.Equal(t, err, ErrActionNotAllowed)
+
+	input.ReturnCallAfterError = true
+	_, err = transferFunc.ProcessBuiltinFunction(accSnd, accDst, input)
+	assert.Nil(t, err)
+
+	input.ReturnCallAfterError = false
+	rolesHandler.CheckAllowedToExecuteCalled = func(account vmcommon.UserAccountHandler, tokenID []byte, action []byte) error {
+		if bytes.Equal(account.AddressBytes(), accSnd.Address) {
+			return nil
+		}
+		return ErrActionNotAllowed
+	}
+
+	_, err = transferFunc.ProcessBuiltinFunction(accSnd, accDst, input)
+	assert.Nil(t, err)
+
+	rolesHandler.CheckAllowedToExecuteCalled = func(account vmcommon.UserAccountHandler, tokenID []byte, action []byte) error {
+		if bytes.Equal(account.AddressBytes(), accDst.Address) {
+			return nil
+		}
+		return ErrActionNotAllowed
+	}
+
+	_, err = transferFunc.ProcessBuiltinFunction(accSnd, accDst, input)
+	assert.Nil(t, err)
+}
+
+func TestDCTTransfer_ProcessBuiltInFunctionOnAsyncCallBack(t *testing.T) {
+	t.Parallel()
+
+	marshalizer := &mock.MarshalizerMock{}
+	transferFunc, _ := NewDCTTransferFunc(10, marshalizer, &mock.GlobalSettingsHandlerStub{}, &mock.ShardCoordinatorStub{}, &mock.DCTRoleHandlerStub{}, 1000, &mock.EpochNotifierStub{})
+	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
+
+	input := &vmcommon.ContractCallInput{
+		VMInput: vmcommon.VMInput{
+			GasProvided: 50,
+			CallValue:   big.NewInt(0),
+			CallType:    vm.AsynchronousCallBack,
+		},
+	}
+	key := []byte("key")
+	value := big.NewInt(10).Bytes()
+	input.Arguments = [][]byte{key, value}
+	accSnd := mock.NewUserAccount([]byte("snd"))
+	accDst := mock.NewUserAccount(core.DCTSCAddress)
 
 	dctKey := append(transferFunc.keyPrefix, key...)
 	dctToken := &dct.DCToken{Value: big.NewInt(100)}

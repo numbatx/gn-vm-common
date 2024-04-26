@@ -3,7 +3,7 @@ package vmcommon
 import (
 	"math/big"
 
-	"github.com/numbatx/gn-vm-common/data/dct"
+	"github.com/numbatx/gn-core/data/dct"
 )
 
 // FunctionNames (alias) is a map of function names
@@ -182,9 +182,10 @@ type Marshalizer interface {
 	IsInterfaceNil() bool
 }
 
-// DCTPauseHandler provides IsPaused function for an DCT token
-type DCTPauseHandler interface {
+// DCTGlobalSettingsHandler provides global settings functions for an DCT token
+type DCTGlobalSettingsHandler interface {
 	IsPaused(token []byte) bool
+	IsLimitedTransfer(tokenKey []byte) bool
 	IsInterfaceNil() bool
 }
 

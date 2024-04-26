@@ -1,8 +1,8 @@
 package mock
 
 import (
+	"github.com/numbatx/gn-core/core/check"
 	vmcommon "github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/check"
 )
 
 // EpochNotifierStub -

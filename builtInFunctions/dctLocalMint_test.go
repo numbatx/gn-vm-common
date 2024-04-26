@@ -5,8 +5,8 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/numbatx/gn-core/data/dct"
 	"github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/data/dct"
 	"github.com/numbatx/gn-vm-common/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -16,34 +16,34 @@ func TestNewDCTLocalMintFunc(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		argsFunc func() (c uint64, m vmcommon.Marshalizer, p vmcommon.DCTPauseHandler, r vmcommon.DCTRoleHandler)
+		argsFunc func() (c uint64, m vmcommon.Marshalizer, p vmcommon.DCTGlobalSettingsHandler, r vmcommon.DCTRoleHandler)
 		exError  error
 	}{
 		{
 			name: "NilMarshalizer",
-			argsFunc: func() (c uint64, m vmcommon.Marshalizer, p vmcommon.DCTPauseHandler, r vmcommon.DCTRoleHandler) {
-				return 0, nil, &mock.PauseHandlerStub{}, &mock.DCTRoleHandlerStub{}
+			argsFunc: func() (c uint64, m vmcommon.Marshalizer, p vmcommon.DCTGlobalSettingsHandler, r vmcommon.DCTRoleHandler) {
+				return 0, nil, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{}
 			},
 			exError: ErrNilMarshalizer,
 		},
 		{
-			name: "NilPauseHandler",
-			argsFunc: func() (c uint64, m vmcommon.Marshalizer, p vmcommon.DCTPauseHandler, r vmcommon.DCTRoleHandler) {
+			name: "NilGlobalSettingsHandler",
+			argsFunc: func() (c uint64, m vmcommon.Marshalizer, p vmcommon.DCTGlobalSettingsHandler, r vmcommon.DCTRoleHandler) {
 				return 0, &mock.MarshalizerMock{}, nil, &mock.DCTRoleHandlerStub{}
 			},
-			exError: ErrNilPauseHandler,
+			exError: ErrNilGlobalSettingsHandler,
 		},
 		{
 			name: "NilRolesHandler",
-			argsFunc: func() (c uint64, m vmcommon.Marshalizer, p vmcommon.DCTPauseHandler, r vmcommon.DCTRoleHandler) {
-				return 0, &mock.MarshalizerMock{}, &mock.PauseHandlerStub{}, nil
+			argsFunc: func() (c uint64, m vmcommon.Marshalizer, p vmcommon.DCTGlobalSettingsHandler, r vmcommon.DCTRoleHandler) {
+				return 0, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, nil
 			},
 			exError: ErrNilRolesHandler,
 		},
 		{
 			name: "Ok",
-			argsFunc: func() (c uint64, m vmcommon.Marshalizer, p vmcommon.DCTPauseHandler, r vmcommon.DCTRoleHandler) {
-				return 0, &mock.MarshalizerMock{}, &mock.PauseHandlerStub{}, &mock.DCTRoleHandlerStub{}
+			argsFunc: func() (c uint64, m vmcommon.Marshalizer, p vmcommon.DCTGlobalSettingsHandler, r vmcommon.DCTRoleHandler) {
+				return 0, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{}
 			},
 			exError: nil,
 		},
@@ -60,7 +60,7 @@ func TestNewDCTLocalMintFunc(t *testing.T) {
 func TestDctLocalMint_SetNewGasConfig(t *testing.T) {
 	t.Parallel()
 
-	dctLocalMintF, _ := NewDCTLocalMintFunc(0, &mock.MarshalizerMock{}, &mock.PauseHandlerStub{}, &mock.DCTRoleHandlerStub{})
+	dctLocalMintF, _ := NewDCTLocalMintFunc(0, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{})
 
 	dctLocalMintF.SetNewGasConfig(&vmcommon.GasCost{BuiltInCost: vmcommon.BuiltInCost{
 		DCTLocalMint: 500},
@@ -72,7 +72,7 @@ func TestDctLocalMint_SetNewGasConfig(t *testing.T) {
 func TestDctLocalMint_ProcessBuiltinFunction_CalledWithValueShouldErr(t *testing.T) {
 	t.Parallel()
 
-	dctLocalMintF, _ := NewDCTLocalMintFunc(0, &mock.MarshalizerMock{}, &mock.PauseHandlerStub{}, &mock.DCTRoleHandlerStub{})
+	dctLocalMintF, _ := NewDCTLocalMintFunc(0, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{})
 
 	_, err := dctLocalMintF.ProcessBuiltinFunction(&mock.AccountWrapMock{}, &mock.AccountWrapMock{}, &vmcommon.ContractCallInput{
 		VMInput: vmcommon.VMInput{
@@ -86,7 +86,7 @@ func TestDctLocalMint_ProcessBuiltinFunction_CheckAllowToExecuteShouldErr(t *tes
 	t.Parallel()
 
 	localErr := errors.New("local err")
-	dctLocalMintF, _ := NewDCTLocalMintFunc(0, &mock.MarshalizerMock{}, &mock.PauseHandlerStub{}, &mock.DCTRoleHandlerStub{
+	dctLocalMintF, _ := NewDCTLocalMintFunc(0, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{
 		CheckAllowedToExecuteCalled: func(account vmcommon.UserAccountHandler, tokenID []byte, action []byte) error {
 			return localErr
 		},
@@ -104,7 +104,7 @@ func TestDctLocalMint_ProcessBuiltinFunction_CheckAllowToExecuteShouldErr(t *tes
 func TestDctLocalMint_ProcessBuiltinFunction_CannotAddToDctBalanceShouldErr(t *testing.T) {
 	t.Parallel()
 
-	dctLocalMintF, _ := NewDCTLocalMintFunc(0, &mock.MarshalizerMock{}, &mock.PauseHandlerStub{}, &mock.DCTRoleHandlerStub{
+	dctLocalMintF, _ := NewDCTLocalMintFunc(0, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{
 		CheckAllowedToExecuteCalled: func(account vmcommon.UserAccountHandler, tokenID []byte, action []byte) error {
 			return nil
 		},
@@ -135,7 +135,7 @@ func TestDctLocalMint_ProcessBuiltinFunction_ShouldWork(t *testing.T) {
 	t.Parallel()
 
 	marshalizer := &mock.MarshalizerMock{}
-	dctLocalMintF, _ := NewDCTLocalMintFunc(50, marshalizer, &mock.PauseHandlerStub{}, &mock.DCTRoleHandlerStub{
+	dctLocalMintF, _ := NewDCTLocalMintFunc(50, marshalizer, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{
 		CheckAllowedToExecuteCalled: func(account vmcommon.UserAccountHandler, tokenID []byte, action []byte) error {
 			return nil
 		},
@@ -173,7 +173,7 @@ func TestDctLocalMint_ProcessBuiltinFunction_ShouldWork(t *testing.T) {
 			{
 				Identifier: []byte("DCTLocalMint"),
 				Address:    nil,
-				Topics:     [][]byte{[]byte("arg1"), big.NewInt(1).Bytes()},
+				Topics:     [][]byte{[]byte("arg1"), big.NewInt(0).Bytes(), big.NewInt(1).Bytes()},
 				Data:       nil,
 			},
 		},

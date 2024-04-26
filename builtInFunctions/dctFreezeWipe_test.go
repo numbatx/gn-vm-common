@@ -4,8 +4,9 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/data/dct"
 	"github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/data/dct"
 	"github.com/numbatx/gn-vm-common/mock"
 	"github.com/stretchr/testify/assert"
 )
@@ -46,7 +47,7 @@ func TestDCTFreezeWipe_ProcessBuiltInFunctionErrors(t *testing.T) {
 	_, err = freeze.ProcessBuiltinFunction(nil, nil, input)
 	assert.Equal(t, err, ErrAddressIsNotDCTSystemSC)
 
-	input.CallerAddr = vmcommon.DCTSCAddress
+	input.CallerAddr = core.DCTSCAddress
 	_, err = freeze.ProcessBuiltinFunction(nil, nil, input)
 	assert.Equal(t, err, ErrNilUserAccount)
 
@@ -80,7 +81,7 @@ func TestDCTFreezeWipe_ProcessBuiltInFunction(t *testing.T) {
 	key := []byte("key")
 
 	input.Arguments = [][]byte{key}
-	input.CallerAddr = vmcommon.DCTSCAddress
+	input.CallerAddr = core.DCTSCAddress
 	input.RecipientAddr = []byte("dst")
 	dctKey := append(freeze.keyPrefix, key...)
 	dctToken := &dct.DCToken{Value: big.NewInt(10)}

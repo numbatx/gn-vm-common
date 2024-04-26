@@ -4,8 +4,8 @@ import (
 	"math/big"
 	"testing"
 
-	vmcommon "github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/data/dct"
+	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/data/dct"
 	"github.com/numbatx/gn-vm-common/mock"
 	"github.com/stretchr/testify/assert"
 )
@@ -38,7 +38,7 @@ func TestDctTransferParser_ParseSingleDCTFunction(t *testing.T) {
 	parsedData, err := dctParser.ParseDCTTransfers(
 		nil,
 		[]byte("address"),
-		vmcommon.BuiltInFunctionDCTTransfer,
+		core.BuiltInFunctionDCTTransfer,
 		[][]byte{[]byte("one")},
 	)
 	assert.Equal(t, err, ErrNotEnoughArguments)
@@ -47,7 +47,7 @@ func TestDctTransferParser_ParseSingleDCTFunction(t *testing.T) {
 	parsedData, err = dctParser.ParseDCTTransfers(
 		nil,
 		[]byte("address"),
-		vmcommon.BuiltInFunctionDCTTransfer,
+		core.BuiltInFunctionDCTTransfer,
 		[][]byte{[]byte("one"), big.NewInt(10).Bytes()},
 	)
 	assert.Nil(t, err)
@@ -59,7 +59,7 @@ func TestDctTransferParser_ParseSingleDCTFunction(t *testing.T) {
 	parsedData, err = dctParser.ParseDCTTransfers(
 		nil,
 		[]byte("address"),
-		vmcommon.BuiltInFunctionDCTTransfer,
+		core.BuiltInFunctionDCTTransfer,
 		[][]byte{[]byte("one"), big.NewInt(10).Bytes(), []byte("function"), []byte("arg")},
 	)
 	assert.Nil(t, err)
@@ -75,7 +75,7 @@ func TestDctTransferParser_ParseSingleNFTTransfer(t *testing.T) {
 	parsedData, err := dctParser.ParseDCTTransfers(
 		nil,
 		[]byte("address"),
-		vmcommon.BuiltInFunctionDCTNFTTransfer,
+		core.BuiltInFunctionDCTNFTTransfer,
 		[][]byte{[]byte("one"), []byte("two")},
 	)
 	assert.Equal(t, err, ErrNotEnoughArguments)
@@ -84,7 +84,7 @@ func TestDctTransferParser_ParseSingleNFTTransfer(t *testing.T) {
 	parsedData, err = dctParser.ParseDCTTransfers(
 		[]byte("address"),
 		[]byte("address"),
-		vmcommon.BuiltInFunctionDCTNFTTransfer,
+		core.BuiltInFunctionDCTNFTTransfer,
 		[][]byte{[]byte("one"), big.NewInt(10).Bytes(), big.NewInt(10).Bytes(), []byte("dest")},
 	)
 	assert.Nil(t, err)
@@ -97,7 +97,7 @@ func TestDctTransferParser_ParseSingleNFTTransfer(t *testing.T) {
 	parsedData, err = dctParser.ParseDCTTransfers(
 		[]byte("address"),
 		[]byte("address"),
-		vmcommon.BuiltInFunctionDCTNFTTransfer,
+		core.BuiltInFunctionDCTNFTTransfer,
 		[][]byte{[]byte("one"), big.NewInt(10).Bytes(), big.NewInt(10).Bytes(), []byte("dest"), []byte("function"), []byte("arg")})
 	assert.Nil(t, err)
 	assert.Equal(t, len(parsedData.DCTTransfers), 1)
@@ -107,7 +107,7 @@ func TestDctTransferParser_ParseSingleNFTTransfer(t *testing.T) {
 	parsedData, err = dctParser.ParseDCTTransfers(
 		[]byte("snd"),
 		[]byte("address"),
-		vmcommon.BuiltInFunctionDCTNFTTransfer,
+		core.BuiltInFunctionDCTNFTTransfer,
 		[][]byte{[]byte("one"), big.NewInt(10).Bytes(), big.NewInt(10).Bytes(), []byte("dest"), []byte("function"), []byte("arg")})
 	assert.Nil(t, err)
 	assert.Equal(t, len(parsedData.DCTTransfers), 1)
@@ -124,7 +124,7 @@ func TestDctTransferParser_ParseMultiNFTTransferTransferOne(t *testing.T) {
 	parsedData, err := dctParser.ParseDCTTransfers(
 		nil,
 		[]byte("address"),
-		vmcommon.BuiltInFunctionMultiDCTNFTTransfer,
+		core.BuiltInFunctionMultiDCTNFTTransfer,
 		[][]byte{[]byte("one"), []byte("two")},
 	)
 	assert.Equal(t, err, ErrNotEnoughArguments)
@@ -133,7 +133,7 @@ func TestDctTransferParser_ParseMultiNFTTransferTransferOne(t *testing.T) {
 	parsedData, err = dctParser.ParseDCTTransfers(
 		[]byte("address"),
 		[]byte("address"),
-		vmcommon.BuiltInFunctionMultiDCTNFTTransfer,
+		core.BuiltInFunctionMultiDCTNFTTransfer,
 		[][]byte{[]byte("dest"), big.NewInt(1).Bytes(), []byte("tokenID"), big.NewInt(10).Bytes()},
 	)
 	assert.Equal(t, err, ErrNotEnoughArguments)
@@ -142,7 +142,7 @@ func TestDctTransferParser_ParseMultiNFTTransferTransferOne(t *testing.T) {
 	parsedData, err = dctParser.ParseDCTTransfers(
 		[]byte("address"),
 		[]byte("address"),
-		vmcommon.BuiltInFunctionMultiDCTNFTTransfer,
+		core.BuiltInFunctionMultiDCTNFTTransfer,
 		[][]byte{[]byte("dest"), big.NewInt(1).Bytes(), []byte("tokenID"), big.NewInt(10).Bytes(), big.NewInt(20).Bytes()},
 	)
 	assert.Nil(t, err)
@@ -155,7 +155,7 @@ func TestDctTransferParser_ParseMultiNFTTransferTransferOne(t *testing.T) {
 	parsedData, err = dctParser.ParseDCTTransfers(
 		[]byte("address"),
 		[]byte("address"),
-		vmcommon.BuiltInFunctionMultiDCTNFTTransfer,
+		core.BuiltInFunctionMultiDCTNFTTransfer,
 		[][]byte{[]byte("dest"), big.NewInt(1).Bytes(), []byte("tokenID"), big.NewInt(10).Bytes(), big.NewInt(20).Bytes(), []byte("function"), []byte("arg")})
 	assert.Nil(t, err)
 	assert.Equal(t, len(parsedData.DCTTransfers), 1)
@@ -168,7 +168,7 @@ func TestDctTransferParser_ParseMultiNFTTransferTransferOne(t *testing.T) {
 	parsedData, err = dctParser.ParseDCTTransfers(
 		[]byte("snd"),
 		[]byte("address"),
-		vmcommon.BuiltInFunctionMultiDCTNFTTransfer,
+		core.BuiltInFunctionMultiDCTNFTTransfer,
 		[][]byte{big.NewInt(1).Bytes(), []byte("tokenID"), big.NewInt(10).Bytes(), marshaled, []byte("function"), []byte("arg")})
 	assert.Nil(t, err)
 	assert.Equal(t, len(parsedData.DCTTransfers), 1)
@@ -185,7 +185,7 @@ func TestDctTransferParser_ParseMultiNFTTransferTransferMore(t *testing.T) {
 	parsedData, err := dctParser.ParseDCTTransfers(
 		[]byte("address"),
 		[]byte("address"),
-		vmcommon.BuiltInFunctionMultiDCTNFTTransfer,
+		core.BuiltInFunctionMultiDCTNFTTransfer,
 		[][]byte{[]byte("dest"), big.NewInt(2).Bytes(), []byte("tokenID"), big.NewInt(10).Bytes(), big.NewInt(20).Bytes()},
 	)
 	assert.Equal(t, err, ErrNotEnoughArguments)
@@ -194,7 +194,7 @@ func TestDctTransferParser_ParseMultiNFTTransferTransferMore(t *testing.T) {
 	parsedData, err = dctParser.ParseDCTTransfers(
 		[]byte("address"),
 		[]byte("address"),
-		vmcommon.BuiltInFunctionMultiDCTNFTTransfer,
+		core.BuiltInFunctionMultiDCTNFTTransfer,
 		[][]byte{[]byte("dest"), big.NewInt(2).Bytes(), []byte("tokenID"), big.NewInt(10).Bytes(), big.NewInt(20).Bytes(), []byte("tokenID"), big.NewInt(0).Bytes(), big.NewInt(20).Bytes()},
 	)
 	assert.Nil(t, err)
@@ -205,12 +205,12 @@ func TestDctTransferParser_ParseMultiNFTTransferTransferMore(t *testing.T) {
 	assert.Equal(t, parsedData.DCTTransfers[0].DCTTokenNonce, big.NewInt(10).Uint64())
 	assert.Equal(t, parsedData.DCTTransfers[1].DCTValue.Uint64(), big.NewInt(20).Uint64())
 	assert.Equal(t, parsedData.DCTTransfers[1].DCTTokenNonce, uint64(0))
-	assert.Equal(t, parsedData.DCTTransfers[1].DCTTokenType, uint32(vmcommon.Fungible))
+	assert.Equal(t, parsedData.DCTTransfers[1].DCTTokenType, uint32(core.Fungible))
 
 	parsedData, err = dctParser.ParseDCTTransfers(
 		[]byte("address"),
 		[]byte("address"),
-		vmcommon.BuiltInFunctionMultiDCTNFTTransfer,
+		core.BuiltInFunctionMultiDCTNFTTransfer,
 		[][]byte{[]byte("dest"), big.NewInt(2).Bytes(), []byte("tokenID"), big.NewInt(10).Bytes(), big.NewInt(20).Bytes(), []byte("tokenID"), big.NewInt(0).Bytes(), big.NewInt(20).Bytes(), []byte("function"), []byte("arg")},
 	)
 	assert.Nil(t, err)
@@ -223,7 +223,7 @@ func TestDctTransferParser_ParseMultiNFTTransferTransferMore(t *testing.T) {
 	parsedData, err = dctParser.ParseDCTTransfers(
 		[]byte("snd"),
 		[]byte("address"),
-		vmcommon.BuiltInFunctionMultiDCTNFTTransfer,
+		core.BuiltInFunctionMultiDCTNFTTransfer,
 		[][]byte{big.NewInt(2).Bytes(), []byte("tokenID"), big.NewInt(10).Bytes(), marshaled, []byte("tokenID"), big.NewInt(0).Bytes(), big.NewInt(20).Bytes()},
 	)
 	assert.Nil(t, err)
@@ -234,12 +234,12 @@ func TestDctTransferParser_ParseMultiNFTTransferTransferMore(t *testing.T) {
 	assert.Equal(t, parsedData.DCTTransfers[0].DCTTokenNonce, big.NewInt(10).Uint64())
 	assert.Equal(t, parsedData.DCTTransfers[1].DCTValue.Uint64(), big.NewInt(20).Uint64())
 	assert.Equal(t, parsedData.DCTTransfers[1].DCTTokenNonce, uint64(0))
-	assert.Equal(t, parsedData.DCTTransfers[1].DCTTokenType, uint32(vmcommon.Fungible))
+	assert.Equal(t, parsedData.DCTTransfers[1].DCTTokenType, uint32(core.Fungible))
 
 	parsedData, err = dctParser.ParseDCTTransfers(
 		[]byte("snd"),
 		[]byte("address"),
-		vmcommon.BuiltInFunctionMultiDCTNFTTransfer,
+		core.BuiltInFunctionMultiDCTNFTTransfer,
 		[][]byte{big.NewInt(2).Bytes(), []byte("tokenID"), big.NewInt(10).Bytes(), marshaled, []byte("tokenID"), big.NewInt(0).Bytes(), big.NewInt(20).Bytes(), []byte("function"), []byte("arg")},
 	)
 	assert.Nil(t, err)

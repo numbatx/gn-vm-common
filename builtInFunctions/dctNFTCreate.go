@@ -6,22 +6,23 @@ import (
 	"math/big"
 	"sync"
 
+	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/core/check"
+	"github.com/numbatx/gn-core/data/dct"
 	"github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/check"
-	"github.com/numbatx/gn-vm-common/data/dct"
 )
 
-var noncePrefix = []byte(vmcommon.NumbatProtectedKeyPrefix + vmcommon.DCTNFTLatestNonceIdentifier)
+var noncePrefix = []byte(core.NumbatProtectedKeyPrefix + core.DCTNFTLatestNonceIdentifier)
 
 type dctNFTCreate struct {
 	baseAlwaysActive
-	keyPrefix    []byte
-	marshalizer  vmcommon.Marshalizer
-	pauseHandler vmcommon.DCTPauseHandler
-	rolesHandler vmcommon.DCTRoleHandler
-	funcGasCost  uint64
-	gasConfig    vmcommon.BaseOperationCost
-	mutExecution sync.RWMutex
+	keyPrefix             []byte
+	marshalizer           vmcommon.Marshalizer
+	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler
+	rolesHandler          vmcommon.DCTRoleHandler
+	funcGasCost           uint64
+	gasConfig             vmcommon.BaseOperationCost
+	mutExecution          sync.RWMutex
 }
 
 // NewDCTNFTCreateFunc returns the dct NFT create built-in function component
@@ -29,27 +30,27 @@ func NewDCTNFTCreateFunc(
 	funcGasCost uint64,
 	gasConfig vmcommon.BaseOperationCost,
 	marshalizer vmcommon.Marshalizer,
-	pauseHandler vmcommon.DCTPauseHandler,
+	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler,
 	rolesHandler vmcommon.DCTRoleHandler,
 ) (*dctNFTCreate, error) {
 	if check.IfNil(marshalizer) {
 		return nil, ErrNilMarshalizer
 	}
-	if check.IfNil(pauseHandler) {
-		return nil, ErrNilPauseHandler
+	if check.IfNil(globalSettingsHandler) {
+		return nil, ErrNilGlobalSettingsHandler
 	}
 	if check.IfNil(rolesHandler) {
 		return nil, ErrNilRolesHandler
 	}
 
 	e := &dctNFTCreate{
-		keyPrefix:    []byte(vmcommon.NumbatProtectedKeyPrefix + vmcommon.DCTKeyIdentifier),
-		marshalizer:  marshalizer,
-		pauseHandler: pauseHandler,
-		rolesHandler: rolesHandler,
-		funcGasCost:  funcGasCost,
-		gasConfig:    gasConfig,
-		mutExecution: sync.RWMutex{},
+		keyPrefix:             []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
+		marshalizer:           marshalizer,
+		globalSettingsHandler: globalSettingsHandler,
+		rolesHandler:          rolesHandler,
+		funcGasCost:           funcGasCost,
+		gasConfig:             gasConfig,
+		mutExecution:          sync.RWMutex{},
 	}
 
 	return e, nil
@@ -92,7 +93,7 @@ func (e *dctNFTCreate) ProcessBuiltinFunction(
 	}
 
 	tokenID := vmInput.Arguments[0]
-	err = e.rolesHandler.CheckAllowedToExecute(acntSnd, vmInput.Arguments[0], []byte(vmcommon.DCTRoleNFTCreate))
+	err = e.rolesHandler.CheckAllowedToExecute(acntSnd, vmInput.Arguments[0], []byte(core.DCTRoleNFTCreate))
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +113,7 @@ func (e *dctNFTCreate) ProcessBuiltinFunction(
 	}
 
 	royalties := uint32(big.NewInt(0).SetBytes(vmInput.Arguments[3]).Uint64())
-	if royalties > vmcommon.MaxRoyalty {
+	if royalties > core.MaxRoyalty {
 		return nil, fmt.Errorf("%w, invalid max royality value", ErrInvalidArguments)
 	}
 
@@ -122,7 +123,7 @@ func (e *dctNFTCreate) ProcessBuiltinFunction(
 		return nil, fmt.Errorf("%w, invalid quantity", ErrInvalidArguments)
 	}
 	if quantity.Cmp(big.NewInt(1)) > 0 {
-		err = e.rolesHandler.CheckAllowedToExecute(acntSnd, vmInput.Arguments[0], []byte(vmcommon.DCTRoleNFTAddQuantity))
+		err = e.rolesHandler.CheckAllowedToExecute(acntSnd, vmInput.Arguments[0], []byte(core.DCTRoleNFTAddQuantity))
 		if err != nil {
 			return nil, err
 		}
@@ -130,7 +131,7 @@ func (e *dctNFTCreate) ProcessBuiltinFunction(
 
 	nextNonce := nonce + 1
 	dctData := &dct.DCToken{
-		Type:  uint32(vmcommon.NonFungible),
+		Type:  uint32(core.NonFungible),
 		Value: quantity,
 		TokenMetaData: &dct.MetaData{
 			Nonce:      nextNonce,
@@ -144,7 +145,7 @@ func (e *dctNFTCreate) ProcessBuiltinFunction(
 	}
 
 	var dctDataBytes []byte
-	dctDataBytes, err = saveDCTNFTToken(acntSnd, dctTokenKey, dctData, e.marshalizer, e.pauseHandler, vmInput.ReturnCallAfterError)
+	dctDataBytes, err = saveDCTNFTToken(acntSnd, dctTokenKey, dctData, e.marshalizer, e.globalSettingsHandler, vmInput.ReturnCallAfterError)
 	if err != nil {
 		return nil, err
 	}
@@ -154,15 +155,14 @@ func (e *dctNFTCreate) ProcessBuiltinFunction(
 		return nil, err
 	}
 
-	logEntry := newEntryForNFT(vmcommon.BuiltInFunctionDCTNFTCreate, vmInput.CallerAddr, tokenID, nextNonce)
-	logEntry.Topics = append(logEntry.Topics, dctDataBytes)
-
 	vmOutput := &vmcommon.VMOutput{
 		ReturnCode:   vmcommon.Ok,
 		GasRemaining: vmInput.GasProvided - gasToUse,
 		ReturnData:   [][]byte{big.NewInt(0).SetUint64(nextNonce).Bytes()},
-		Logs:         []*vmcommon.LogEntry{logEntry},
 	}
+
+	addDCTEntryInVMOutput(vmOutput, []byte(core.BuiltInFunctionDCTNFTCreate), vmInput.Arguments[0], nextNonce, quantity, vmInput.CallerAddr, dctDataBytes)
+
 	return vmOutput, nil
 }
 
@@ -213,7 +213,7 @@ func getDCTNFTTokenOnDestination(
 	marshalizer vmcommon.Marshalizer,
 ) (*dct.DCToken, bool, error) {
 	dctNFTTokenKey := computeDCTNFTTokenKey(dctTokenKey, nonce)
-	dctData := &dct.DCToken{Value: big.NewInt(0), Type: uint32(vmcommon.Fungible)}
+	dctData := &dct.DCToken{Value: big.NewInt(0), Type: uint32(core.Fungible)}
 	marshaledData, err := accnt.AccountDataHandler().RetrieveValue(dctNFTTokenKey)
 	if err != nil || len(marshaledData) == 0 {
 		return dctData, true, nil
@@ -232,10 +232,10 @@ func saveDCTNFTToken(
 	dctTokenKey []byte,
 	dctData *dct.DCToken,
 	marshalizer vmcommon.Marshalizer,
-	pauseHandler vmcommon.DCTPauseHandler,
+	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler,
 	isReturnWithError bool,
 ) ([]byte, error) {
-	err := checkFrozeAndPause(acnt.AddressBytes(), dctTokenKey, dctData, pauseHandler, isReturnWithError)
+	err := checkFrozeAndPause(acnt.AddressBytes(), dctTokenKey, dctData, globalSettingsHandler, isReturnWithError)
 	if err != nil {
 		return nil, err
 	}
@@ -245,7 +245,7 @@ func saveDCTNFTToken(
 		nonce = dctData.TokenMetaData.Nonce
 	}
 	dctNFTTokenKey := computeDCTNFTTokenKey(dctTokenKey, nonce)
-	err = checkFrozeAndPause(acnt.AddressBytes(), dctNFTTokenKey, dctData, pauseHandler, isReturnWithError)
+	err = checkFrozeAndPause(acnt.AddressBytes(), dctNFTTokenKey, dctData, globalSettingsHandler, isReturnWithError)
 	if err != nil {
 		return nil, err
 	}

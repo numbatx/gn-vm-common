@@ -5,38 +5,50 @@ import (
 	"math/big"
 	"sync"
 
+	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/core/check"
 	"github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/check"
+	"github.com/numbatx/gn-vm-common/atomic"
 )
 
 type dctBurn struct {
-	baseAlwaysActive
-	funcGasCost  uint64
-	marshalizer  vmcommon.Marshalizer
-	keyPrefix    []byte
-	pauseHandler vmcommon.DCTPauseHandler
-	mutExecution sync.RWMutex
+	*baseDisabled
+	funcGasCost           uint64
+	marshalizer           vmcommon.Marshalizer
+	keyPrefix             []byte
+	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler
+	mutExecution          sync.RWMutex
 }
 
 // NewDCTBurnFunc returns the dct burn built-in function component
 func NewDCTBurnFunc(
 	funcGasCost uint64,
 	marshalizer vmcommon.Marshalizer,
-	pauseHandler vmcommon.DCTPauseHandler,
+	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler,
+	disableEpoch uint32,
+	epochNotifier vmcommon.EpochNotifier,
 ) (*dctBurn, error) {
 	if check.IfNil(marshalizer) {
 		return nil, ErrNilMarshalizer
 	}
-	if check.IfNil(pauseHandler) {
-		return nil, ErrNilPauseHandler
+	if check.IfNil(globalSettingsHandler) {
+		return nil, ErrNilGlobalSettingsHandler
 	}
 
 	e := &dctBurn{
-		funcGasCost:  funcGasCost,
-		marshalizer:  marshalizer,
-		keyPrefix:    []byte(vmcommon.NumbatProtectedKeyPrefix + vmcommon.DCTKeyIdentifier),
-		pauseHandler: pauseHandler,
+		funcGasCost:           funcGasCost,
+		marshalizer:           marshalizer,
+		keyPrefix:             []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
+		globalSettingsHandler: globalSettingsHandler,
 	}
+
+	e.baseDisabled = &baseDisabled{
+		function:          core.BuiltInFunctionDCTBurn,
+		deActivationEpoch: disableEpoch,
+		flagActivated:     atomic.Flag{},
+	}
+
+	epochNotifier.RegisterNotifyHandler(e)
 
 	return e, nil
 }
@@ -71,7 +83,7 @@ func (e *dctBurn) ProcessBuiltinFunction(
 	if value.Cmp(zero) <= 0 {
 		return nil, ErrNegativeValue
 	}
-	if !bytes.Equal(vmInput.RecipientAddr, vmcommon.DCTSCAddress) {
+	if !bytes.Equal(vmInput.RecipientAddr, core.DCTSCAddress) {
 		return nil, ErrAddressIsNotDCTSystemSC
 	}
 	if check.IfNil(acntSnd) {
@@ -84,7 +96,7 @@ func (e *dctBurn) ProcessBuiltinFunction(
 		return nil, ErrNotEnoughGas
 	}
 
-	err = addToDCTBalance(acntSnd, dctTokenKey, big.NewInt(0).Neg(value), e.marshalizer, e.pauseHandler, vmInput.ReturnCallAfterError)
+	err = addToDCTBalance(acntSnd, dctTokenKey, big.NewInt(0).Neg(value), e.marshalizer, e.globalSettingsHandler, vmInput.ReturnCallAfterError)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +106,7 @@ func (e *dctBurn) ProcessBuiltinFunction(
 	if vmcommon.IsSmartContractAddress(vmInput.CallerAddr) {
 		addOutputTransferToVMOutput(
 			vmInput.CallerAddr,
-			vmcommon.BuiltInFunctionDCTBurn,
+			core.BuiltInFunctionDCTBurn,
 			vmInput.Arguments,
 			vmInput.RecipientAddr,
 			vmInput.GasLocked,
@@ -102,7 +114,7 @@ func (e *dctBurn) ProcessBuiltinFunction(
 			vmOutput)
 	}
 
-	addDCTEntryInVMOutput(vmOutput, []byte(vmcommon.BuiltInFunctionDCTBurn), vmInput.Arguments[0], value, vmInput.CallerAddr)
+	addDCTEntryInVMOutput(vmOutput, []byte(core.BuiltInFunctionDCTBurn), vmInput.Arguments[0], 0, value, vmInput.CallerAddr)
 
 	return vmOutput, nil
 }
