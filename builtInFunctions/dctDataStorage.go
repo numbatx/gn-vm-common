@@ -17,14 +17,17 @@ import (
 const existsOnShard = byte(1)
 
 type dctDataStorage struct {
-	accounts                vmcommon.AccountsAdapter
-	globalSettingsHandler   vmcommon.DCTGlobalSettingsHandler
-	marshalizer             vmcommon.Marshalizer
-	keyPrefix               []byte
-	flagSaveToSystemAccount atomic.Flag
-	saveToSystemEnableEpoch uint32
-	shardCoordinator        vmcommon.Coordinator
-	txDataParser            vmcommon.CallArgsParser
+	accounts              vmcommon.AccountsAdapter
+	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler
+	marshalizer           vmcommon.Marshalizer
+	keyPrefix             []byte
+	shardCoordinator      vmcommon.Coordinator
+	txDataParser          vmcommon.CallArgsParser
+
+	flagSaveToSystemAccount          atomic.Flag
+	saveToSystemEnableEpoch          uint32
+	flagCheckFrozenCollection        atomic.Flag
+	checkFrozenCollectionEnableEpoch uint32
 }
 
 // ArgsNewDCTDataStorage defines the argument list for new dct data storage handler
@@ -56,14 +59,17 @@ func NewDCTDataStorage(args ArgsNewDCTDataStorage) (*dctDataStorage, error) {
 	}
 
 	e := &dctDataStorage{
-		accounts:                args.Accounts,
-		globalSettingsHandler:   args.GlobalSettingsHandler,
-		marshalizer:             args.Marshalizer,
-		keyPrefix:               []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
-		flagSaveToSystemAccount: atomic.Flag{},
-		saveToSystemEnableEpoch: args.SaveToSystemEnableEpoch,
-		shardCoordinator:        args.ShardCoordinator,
-		txDataParser:            parsers.NewCallArgsParser(),
+		accounts:              args.Accounts,
+		globalSettingsHandler: args.GlobalSettingsHandler,
+		marshalizer:           args.Marshalizer,
+		keyPrefix:             []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
+		shardCoordinator:      args.ShardCoordinator,
+		txDataParser:          parsers.NewCallArgsParser(),
+
+		flagSaveToSystemAccount:          atomic.Flag{},
+		saveToSystemEnableEpoch:          args.SaveToSystemEnableEpoch,
+		flagCheckFrozenCollection:        atomic.Flag{},
+		checkFrozenCollectionEnableEpoch: args.SaveToSystemEnableEpoch,
 	}
 
 	args.EpochNotifier.RegisterNotifyHandler(e)
@@ -160,6 +166,42 @@ func (e *dctDataStorage) getDCTMetaDataFromSystemAccount(
 	return dctData.TokenMetaData, nil
 }
 
+// CheckCollectionIsFrozenForAccount returns
+func (e *dctDataStorage) checkCollectionIsFrozenForAccount(
+	accnt vmcommon.UserAccountHandler,
+	dctTokenKey []byte,
+	nonce uint64,
+	isReturnWithError bool,
+) error {
+	if !e.flagCheckFrozenCollection.IsSet() {
+		return nil
+	}
+	if nonce == 0 || isReturnWithError {
+		return nil
+	}
+
+	dctData := &dct.DCToken{
+		Value: big.NewInt(0),
+		Type:  uint32(core.Fungible),
+	}
+	marshaledData, err := accnt.AccountDataHandler().RetrieveValue(dctTokenKey)
+	if err != nil || len(marshaledData) == 0 {
+		return nil
+	}
+
+	err = e.marshalizer.Unmarshal(dctData, marshaledData)
+	if err != nil {
+		return err
+	}
+
+	dctUserMetaData := DCTUserMetadataFromBytes(dctData.Properties)
+	if dctUserMetaData.Frozen {
+		return ErrDCTIsFrozenForAccount
+	}
+
+	return nil
+}
+
 // SaveDCTNFTToken saves the nft token to the account and system account
 func (e *dctDataStorage) SaveDCTNFTToken(
 	senderAddress []byte,
@@ -181,6 +223,19 @@ func (e *dctDataStorage) SaveDCTNFTToken(
 		return nil, err
 	}
 
+	err = e.checkCollectionIsFrozenForAccount(acnt, dctTokenKey, nonce, isReturnWithError)
+	if err != nil {
+		return nil, err
+	}
+
+	senderShardID := e.shardCoordinator.ComputeId(senderAddress)
+	if e.flagSaveToSystemAccount.IsSet() {
+		err = e.saveDCTMetaDataToSystemAccount(senderShardID, dctNFTTokenKey, nonce, dctData, mustUpdate)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	if dctData.Value.Cmp(zero) <= 0 {
 		return nil, acnt.AccountDataHandler().SaveKeyValue(dctNFTTokenKey, nil)
 	}
@@ -192,12 +247,6 @@ func (e *dctDataStorage) SaveDCTNFTToken(
 		}
 
 		return marshaledData, acnt.AccountDataHandler().SaveKeyValue(dctNFTTokenKey, marshaledData)
-	}
-
-	senderShardID := e.shardCoordinator.ComputeId(senderAddress)
-	err = e.saveDCTMetaDataToSystemAccount(senderShardID, dctNFTTokenKey, nonce, dctData, mustUpdate)
-	if err != nil {
-		return nil, err
 	}
 
 	dctDataOnAccount := &dct.DCToken{
@@ -435,6 +484,9 @@ func (e *dctDataStorage) addMetaDataToSystemAccountFromMultiTransfer(
 func (e *dctDataStorage) EpochConfirmed(epoch uint32, _ uint64) {
 	e.flagSaveToSystemAccount.SetValue(epoch >= e.saveToSystemEnableEpoch)
 	log.Debug("DCT NFT save to system account", "enabled", e.flagSaveToSystemAccount.IsSet())
+
+	e.flagCheckFrozenCollection.SetValue(epoch >= e.checkFrozenCollectionEnableEpoch)
+	log.Debug("DCT NFT check frozen collection", "enabled", e.flagCheckFrozenCollection.IsSet())
 }
 
 // IsInterfaceNil returns true if underlying object in nil

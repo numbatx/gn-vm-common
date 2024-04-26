@@ -77,7 +77,7 @@ func (e *dctNFTupdate) SetNewGasConfig(gasCost *vmcommon.GasCost) {
 	e.mutExecution.Unlock()
 }
 
-// ProcessBuiltinFunction resolves DCT NFT add quantity function call
+// ProcessBuiltinFunction resolves DCT NFT update attributes function call
 // Requires 3 arguments:
 // arg0 - token identifier
 // arg1 - nonce
@@ -129,7 +129,7 @@ func (e *dctNFTupdate) ProcessBuiltinFunction(
 		GasRemaining: vmInput.GasProvided - e.funcGasCost - gasCostForStore,
 	}
 
-	addDCTEntryInVMOutput(vmOutput, []byte(core.BuiltInFunctionDCTNFTUpdateAttributes), vmInput.Arguments[0], nonce, big.NewInt(0), vmInput.CallerAddr)
+	addDCTEntryInVMOutput(vmOutput, []byte(core.BuiltInFunctionDCTNFTUpdateAttributes), vmInput.Arguments[0], nonce, big.NewInt(0), vmInput.CallerAddr, vmInput.Arguments[2])
 
 	return vmOutput, nil
 }

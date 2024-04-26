@@ -272,6 +272,41 @@ func TestDctDataStorage_SaveDCTNFTTokenNoChangeInSystemAcc(t *testing.T) {
 	assert.Equal(t, dctData, dctDataGet)
 }
 
+func TestDctDataStorage_SaveDCTNFTTokenWhenQuantityZero(t *testing.T) {
+	t.Parallel()
+
+	args := createMockArgsForNewDCTDataStorage()
+	e, _ := NewDCTDataStorage(args)
+
+	userAcc := mock.NewAccountWrapMock([]byte("addr"))
+	nonce := uint64(10)
+	dctData := &dct.DCToken{
+		Value: big.NewInt(10),
+		TokenMetaData: &dct.MetaData{
+			Name:  []byte("test"),
+			Nonce: nonce,
+		},
+	}
+
+	tokenIdentifier := "testTkn"
+	key := core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier + tokenIdentifier
+	dctDataBytes, _ := args.Marshalizer.Marshal(dctData)
+	tokenKey := append([]byte(key), big.NewInt(int64(nonce)).Bytes()...)
+	_ = userAcc.AccountDataHandler().SaveKeyValue(tokenKey, dctDataBytes)
+
+	dctData.Value = big.NewInt(0)
+	_, err := e.SaveDCTNFTToken([]byte("address"), userAcc, []byte(key), nonce, dctData, false, false)
+	assert.Nil(t, err)
+
+	val, err := userAcc.AccountDataHandler().RetrieveValue(tokenKey)
+	assert.Nil(t, val)
+	assert.Nil(t, err)
+
+	dctMetaData, err := e.getDCTMetaDataFromSystemAccount(tokenKey)
+	assert.Nil(t, err)
+	assert.Equal(t, dctData.TokenMetaData, dctMetaData)
+}
+
 func TestDctDataStorage_WasAlreadySentToDestinationShard(t *testing.T) {
 	t.Parallel()
 
@@ -471,4 +506,50 @@ func TestDctDataStorage_SaveNFTMetaDataToSystemAccountWithMultiTransfer(t *testi
 	dctGetData, _, err = e.getDCTDigitalTokenDataFromSystemAccount(otherTokenKey)
 	assert.Nil(t, dctGetData)
 	assert.Nil(t, err)
+}
+
+func TestDctDataStorage_checkCollectionFrozen(t *testing.T) {
+	t.Parallel()
+
+	args := createMockArgsForNewDCTDataStorage()
+	shardCoordinator := &mock.ShardCoordinatorStub{}
+	args.ShardCoordinator = shardCoordinator
+	e, _ := NewDCTDataStorage(args)
+
+	e.flagCheckFrozenCollection.SetValue(false)
+
+	acnt, _ := e.accounts.LoadAccount([]byte("address1"))
+	userAcc := acnt.(vmcommon.UserAccountHandler)
+
+	tickerID := []byte("TOKEN-ABCDEF")
+	dctTokenKey := append(e.keyPrefix, tickerID...)
+	err := e.checkCollectionIsFrozenForAccount(userAcc, dctTokenKey, 1, false)
+	assert.Nil(t, err)
+
+	e.flagCheckFrozenCollection.SetValue(true)
+	err = e.checkCollectionIsFrozenForAccount(userAcc, dctTokenKey, 0, false)
+	assert.Nil(t, err)
+
+	err = e.checkCollectionIsFrozenForAccount(userAcc, dctTokenKey, 1, true)
+	assert.Nil(t, err)
+
+	err = e.checkCollectionIsFrozenForAccount(userAcc, dctTokenKey, 1, false)
+	assert.Nil(t, err)
+
+	tokenData, _ := getDCTDataFromKey(userAcc, dctTokenKey, e.marshalizer)
+
+	dctUserMetadata := DCTUserMetadataFromBytes(tokenData.Properties)
+	dctUserMetadata.Frozen = false
+	tokenData.Properties = dctUserMetadata.ToBytes()
+	_ = saveDCTData(userAcc, tokenData, dctTokenKey, e.marshalizer)
+
+	err = e.checkCollectionIsFrozenForAccount(userAcc, dctTokenKey, 1, false)
+	assert.Nil(t, err)
+
+	dctUserMetadata.Frozen = true
+	tokenData.Properties = dctUserMetadata.ToBytes()
+	_ = saveDCTData(userAcc, tokenData, dctTokenKey, e.marshalizer)
+
+	err = e.checkCollectionIsFrozenForAccount(userAcc, dctTokenKey, 1, false)
+	assert.Equal(t, err, ErrDCTIsFrozenForAccount)
 }

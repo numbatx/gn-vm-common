@@ -3,6 +3,7 @@ package vmcommon
 import (
 	"math/big"
 
+	"github.com/numbatx/gn-core/core/closing"
 	"github.com/numbatx/gn-core/data"
 	"github.com/numbatx/gn-core/data/dct"
 )
@@ -94,6 +95,12 @@ type BlockchainHook interface {
 	// GetDCTToken loads the DCT digital token for the given key
 	GetDCTToken(address []byte, tokenID []byte, nonce uint64) (*dct.DCToken, error)
 
+	// IsPaused returns true if the tokenID is paused globally
+	IsPaused(tokenID []byte) bool
+
+	// IsLimitedTransfer return true if the tokenID has limited transfers
+	IsLimitedTransfer(tokenID []byte) bool
+
 	// GetSnapshot gets the number of entries in the journal as a snapshot id
 	GetSnapshot() int
 
@@ -106,6 +113,8 @@ type BlockchainHook interface {
 
 // VMExecutionHandler interface for any Numbat VM endpoint
 type VMExecutionHandler interface {
+	closing.Closer
+
 	// RunSmartContractCreate computes how a smart contract creation should be performed
 	RunSmartContractCreate(input *ContractCreateInput) (*VMOutput, error)
 
@@ -185,8 +194,8 @@ type Marshalizer interface {
 
 // DCTGlobalSettingsHandler provides global settings functions for an DCT token
 type DCTGlobalSettingsHandler interface {
-	IsPaused(token []byte) bool
-	IsLimitedTransfer(tokenKey []byte) bool
+	IsPaused(dctTokenKey []byte) bool
+	IsLimitedTransfer(dctTokenKey []byte) bool
 	IsInterfaceNil() bool
 }
 
