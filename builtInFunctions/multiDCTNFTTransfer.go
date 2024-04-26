@@ -8,10 +8,10 @@ import (
 	"sync"
 
 	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/core/atomic"
 	"github.com/numbatx/gn-core/core/check"
 	"github.com/numbatx/gn-core/data/dct"
 	"github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/atomic"
 )
 
 type dctNFTMultiTransfer struct {
@@ -98,7 +98,7 @@ func NewDCTNFTMultiTransferFunc(
 // EpochConfirmed is called whenever a new epoch is confirmed
 func (e *dctNFTMultiTransfer) EpochConfirmed(epoch uint32, nonce uint64) {
 	e.baseEnabled.EpochConfirmed(epoch, nonce)
-	e.flagTransferToMeta.Toggle(epoch >= e.transferToMetaEnableEpoch)
+	e.flagTransferToMeta.SetValue(epoch >= e.transferToMetaEnableEpoch)
 	log.Debug("DCT NFT transfer to metachain flag", "enabled", e.flagTransferToMeta.IsSet())
 }
 

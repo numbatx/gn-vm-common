@@ -7,11 +7,11 @@ import (
 	"sync"
 
 	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/core/atomic"
 	"github.com/numbatx/gn-core/core/check"
 	"github.com/numbatx/gn-core/data/dct"
 	"github.com/numbatx/gn-core/data/vm"
 	"github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/atomic"
 )
 
 var noncePrefix = []byte(core.NumbatProtectedKeyPrefix + core.DCTNFTLatestNonceIdentifier)
@@ -83,7 +83,7 @@ func NewDCTNFTCreateFunc(
 
 // EpochConfirmed is called whenever a new epoch is confirmed
 func (e *dctNFTCreate) EpochConfirmed(epoch uint32, _ uint64) {
-	e.flagValueLengthCheck.Toggle(epoch >= e.valueLengthCheckEnableEpoch)
+	e.flagValueLengthCheck.SetValue(epoch >= e.valueLengthCheckEnableEpoch)
 	log.Debug("DCT NFT Create quantity value length check", "enabled", e.flagValueLengthCheck.IsSet())
 }
 

@@ -282,7 +282,7 @@ func (b *builtInFuncCreator) CreateBuiltInFunctionContainer() (vmcommon.BuiltInF
 		return nil, err
 	}
 
-	newFunc, err = NewDCTNFTTransferFunc(b.gasConfig.BuiltInCost.DCTNFTTransfer, b.marshalizer, globalSettingsFunc, b.accounts, b.shardCoordinator, b.gasConfig.BaseOperationCost, setRoleFunc, b.dctTransferToMetaEnableEpoch, b.dctStorageHandler, b.epochNotifier)
+	newFunc, err = NewDCTNFTTransferFunc(b.gasConfig.BuiltInCost.DCTNFTTransfer, b.marshalizer, globalSettingsFunc, b.accounts, b.shardCoordinator, b.gasConfig.BaseOperationCost, setRoleFunc, b.dctTransferToMetaEnableEpoch, b.saveNFTToSystemAccountEnableEpoch, b.dctStorageHandler, b.epochNotifier)
 	if err != nil {
 		return nil, err
 	}

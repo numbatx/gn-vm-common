@@ -9,11 +9,11 @@ import (
 	"sync"
 
 	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/core/atomic"
 	"github.com/numbatx/gn-core/core/check"
 	"github.com/numbatx/gn-core/data/dct"
 	"github.com/numbatx/gn-core/data/vm"
 	"github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/atomic"
 )
 
 var oneValue = big.NewInt(1)
@@ -34,6 +34,8 @@ type dctNFTTransfer struct {
 	dctStorageHandler        vmcommon.DCTNFTStorageHandler
 	transferToMetaEnableEpoch uint32
 	flagTransferToMeta        atomic.Flag
+	check0TransferEnableEpoch uint32
+	flagCheck0Transfer        atomic.Flag
 }
 
 // NewDCTNFTTransferFunc returns the dct NFT transfer built-in function component
@@ -46,6 +48,7 @@ func NewDCTNFTTransferFunc(
 	gasConfig vmcommon.BaseOperationCost,
 	rolesHandler vmcommon.DCTRoleHandler,
 	transferToMetaEnableEpoch uint32,
+	checkZeroTransferEnableEpoch uint32,
 	dctStorageHandler vmcommon.DCTNFTStorageHandler,
 	epochNotifier vmcommon.EpochNotifier,
 ) (*dctNFTTransfer, error) {
@@ -83,6 +86,7 @@ func NewDCTNFTTransferFunc(
 		payableHandler:            &disabledPayableHandler{},
 		rolesHandler:              rolesHandler,
 		transferToMetaEnableEpoch: transferToMetaEnableEpoch,
+		check0TransferEnableEpoch: checkZeroTransferEnableEpoch,
 		dctStorageHandler:        dctStorageHandler,
 	}
 
@@ -93,8 +97,10 @@ func NewDCTNFTTransferFunc(
 
 // EpochConfirmed is called whenever a new epoch is confirmed
 func (e *dctNFTTransfer) EpochConfirmed(epoch uint32, _ uint64) {
-	e.flagTransferToMeta.Toggle(epoch >= e.transferToMetaEnableEpoch)
+	e.flagTransferToMeta.SetValue(epoch >= e.transferToMetaEnableEpoch)
 	log.Debug("DCT NFT transfer to metachain flag", "enabled", e.flagTransferToMeta.IsSet())
+	e.flagCheck0Transfer.SetValue(epoch >= e.check0TransferEnableEpoch)
+	log.Debug("DCT NFT transfer check zero transfer", "enabled", e.flagCheck0Transfer.IsSet())
 }
 
 // SetPayableHandler will set the payable handler to the function
@@ -230,6 +236,9 @@ func (e *dctNFTTransfer) processNFTTransferOnSenderShard(
 
 	quantityToTransfer := big.NewInt(0).SetBytes(vmInput.Arguments[2])
 	if dctData.Value.Cmp(quantityToTransfer) < 0 {
+		return nil, ErrInvalidNFTQuantity
+	}
+	if e.flagCheck0Transfer.IsSet() && quantityToTransfer.Cmp(zero) <= 0 {
 		return nil, ErrInvalidNFTQuantity
 	}
 	dctData.Value.Sub(dctData.Value, quantityToTransfer)
