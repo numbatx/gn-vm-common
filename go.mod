@@ -5,7 +5,7 @@ go 1.20
 require (
 	github.com/mitchellh/mapstructure v1.4.1
 	github.com/numbatx/gn-core v0.0.6
-	github.com/numbatx/gn-logger v0.0.2
+	github.com/numbatx/gn-logger v0.0.4
 	github.com/stretchr/testify v1.9.0
 )
 
