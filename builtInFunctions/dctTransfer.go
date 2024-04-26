@@ -26,11 +26,13 @@ type dctTransfer struct {
 	shardCoordinator      vmcommon.Coordinator
 	mutExecution          sync.RWMutex
 
-	rolesHandler                   vmcommon.DCTRoleHandler
-	transferToMetaEnableEpoch      uint32
-	flagTransferToMeta             atomic.Flag
-	checkCorrectTokenIDEnableEpoch uint32
-	flagCheckCorrectTokenID        atomic.Flag
+	rolesHandler                     vmcommon.DCTRoleHandler
+	transferToMetaEnableEpoch        uint32
+	flagTransferToMeta               atomic.Flag
+	checkCorrectTokenIDEnableEpoch   uint32
+	flagCheckCorrectTokenID          atomic.Flag
+	checkFunctionArgumentEnableEpoch uint32
+	flagCheckFunctionArgument        atomic.Flag
 }
 
 // NewDCTTransferFunc returns the dct transfer built-in function component
@@ -42,6 +44,7 @@ func NewDCTTransferFunc(
 	rolesHandler vmcommon.DCTRoleHandler,
 	transferToMetaEnableEpoch uint32,
 	checkCorrectTokenIDEnableEpoch uint32,
+	checkFunctionArgumentEnableEpoch uint32,
 	epochNotifier vmcommon.EpochNotifier,
 ) (*dctTransfer, error) {
 	if check.IfNil(marshalizer) {
@@ -61,15 +64,16 @@ func NewDCTTransferFunc(
 	}
 
 	e := &dctTransfer{
-		funcGasCost:                    funcGasCost,
-		marshalizer:                    marshalizer,
-		keyPrefix:                      []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
-		globalSettingsHandler:          globalSettingsHandler,
-		payableHandler:                 &disabledPayableHandler{},
-		shardCoordinator:               shardCoordinator,
-		rolesHandler:                   rolesHandler,
-		checkCorrectTokenIDEnableEpoch: checkCorrectTokenIDEnableEpoch,
-		transferToMetaEnableEpoch:      transferToMetaEnableEpoch,
+		funcGasCost:                      funcGasCost,
+		marshalizer:                      marshalizer,
+		keyPrefix:                        []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
+		globalSettingsHandler:            globalSettingsHandler,
+		payableHandler:                   &disabledPayableHandler{},
+		shardCoordinator:                 shardCoordinator,
+		rolesHandler:                     rolesHandler,
+		checkCorrectTokenIDEnableEpoch:   checkCorrectTokenIDEnableEpoch,
+		transferToMetaEnableEpoch:        transferToMetaEnableEpoch,
+		checkFunctionArgumentEnableEpoch: checkFunctionArgumentEnableEpoch,
 	}
 
 	epochNotifier.RegisterNotifyHandler(e)
@@ -83,6 +87,8 @@ func (e *dctTransfer) EpochConfirmed(epoch uint32, _ uint64) {
 	log.Debug("DCT transfer to metachain flag", "enabled", e.flagTransferToMeta.IsSet())
 	e.flagCheckCorrectTokenID.SetValue(epoch >= e.checkCorrectTokenIDEnableEpoch)
 	log.Debug("DCT transfer check correct tokenID for transfer role", "enabled", e.flagCheckCorrectTokenID.IsSet())
+	e.flagCheckFunctionArgument.SetValue(epoch >= e.checkFunctionArgumentEnableEpoch)
+	log.Debug("DCT transfer check function argument", "enabled", e.flagCheckFunctionArgument.IsSet())
 }
 
 // SetNewGasConfig is called whenever gas cost is changed
@@ -144,10 +150,10 @@ func (e *dctTransfer) ProcessBuiltinFunction(
 		}
 	}
 
-	isSCCallAfter := determineIsSCCallAfter(vmInput, vmInput.RecipientAddr, core.MinLenArgumentsDCTTransfer)
+	isSCCallAfter := determineIsSCCallAfter(vmInput, vmInput.RecipientAddr, core.MinLenArgumentsDCTTransfer, e.flagCheckFunctionArgument.IsSet())
 	vmOutput := &vmcommon.VMOutput{GasRemaining: gasRemaining, ReturnCode: vmcommon.Ok}
 	if !check.IfNil(acntDst) {
-		if mustVerifyPayable(vmInput, core.MinLenArgumentsDCTTransfer) {
+		if mustVerifyPayable(vmInput, core.MinLenArgumentsDCTTransfer, e.flagCheckFunctionArgument.IsSet()) {
 			isPayable, errPayable := e.payableHandler.IsPayable(vmInput.CallerAddr, vmInput.RecipientAddr)
 			if errPayable != nil {
 				return nil, errPayable
@@ -207,7 +213,7 @@ func (e *dctTransfer) ProcessBuiltinFunction(
 	return vmOutput, nil
 }
 
-func determineIsSCCallAfter(vmInput *vmcommon.ContractCallInput, destAddress []byte, minLenArguments int) bool {
+func determineIsSCCallAfter(vmInput *vmcommon.ContractCallInput, destAddress []byte, minLenArguments int, checkEmptyFunction bool) bool {
 	if len(vmInput.Arguments) <= minLenArguments {
 		return false
 	}
@@ -217,20 +223,30 @@ func determineIsSCCallAfter(vmInput *vmcommon.ContractCallInput, destAddress []b
 	if !vmcommon.IsSmartContractAddress(destAddress) {
 		return false
 	}
+	if checkEmptyFunction {
+		if len(vmInput.Arguments[minLenArguments]) == 0 {
+			return false
+		}
+	}
 
 	return true
 }
 
-func mustVerifyPayable(vmInput *vmcommon.ContractCallInput, minLenArguments int) bool {
+func mustVerifyPayable(vmInput *vmcommon.ContractCallInput, minLenArguments int, checkEmptyFunction bool) bool {
 	if vmInput.CallType == vm.AsynchronousCall || vmInput.CallType == vm.DCTTransferAndExecute {
 		return false
 	}
 	if bytes.Equal(vmInput.CallerAddr, core.DCTSCAddress) {
 		return false
 	}
-
 	if len(vmInput.Arguments) > minLenArguments {
-		return false
+		if checkEmptyFunction {
+			if len(vmInput.Arguments[minLenArguments]) > 0 {
+				return false
+			}
+		} else {
+			return false
+		}
 	}
 
 	return true
