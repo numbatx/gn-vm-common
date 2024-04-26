@@ -29,19 +29,13 @@ func createDCTNFTMultiTransferWithStubArguments() *dctNFTMultiTransfer {
 		&mock.EpochNotifierStub{},
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		createNewDCTDataStorageHandler(),
 	)
 
 	return multiTransfer
 }
 
-func createDCTNFTMultiTransferWithMockArguments(selfShard uint32, numShards uint32, globalSettingsHandler vmcommon.DCTGlobalSettingsHandler) *dctNFTMultiTransfer {
-	marshalizer := &mock.MarshalizerMock{}
-	shardCoordinator := mock.NewMultiShardsCoordinatorMock(numShards)
-	shardCoordinator.CurrentShard = selfShard
-	shardCoordinator.ComputeIdCalled = func(address []byte) uint32 {
-		lastByte := uint32(address[len(address)-1])
-		return lastByte
-	}
+func createAccountsAdapterWithMap() vmcommon.AccountsAdapter {
 	mapAccounts := make(map[string]vmcommon.UserAccountHandler)
 	accounts := &mock.AccountsStub{
 		LoadAccountCalled: func(address []byte) (vmcommon.AccountHandler, error) {
@@ -58,7 +52,23 @@ func createDCTNFTMultiTransferWithMockArguments(selfShard uint32, numShards uint
 			}
 			return mapAccounts[string(address)], nil
 		},
+		SaveAccountCalled: func(account vmcommon.AccountHandler) error {
+			mapAccounts[string(account.AddressBytes())] = account.(vmcommon.UserAccountHandler)
+			return nil
+		},
 	}
+	return accounts
+}
+
+func createDCTNFTMultiTransferWithMockArguments(selfShard uint32, numShards uint32, globalSettingsHandler vmcommon.DCTGlobalSettingsHandler) *dctNFTMultiTransfer {
+	marshalizer := &mock.MarshalizerMock{}
+	shardCoordinator := mock.NewMultiShardsCoordinatorMock(numShards)
+	shardCoordinator.CurrentShard = selfShard
+	shardCoordinator.ComputeIdCalled = func(address []byte) uint32 {
+		lastByte := uint32(address[len(address)-1])
+		return lastByte
+	}
+	accounts := createAccountsAdapterWithMap()
 
 	multiTransfer, _ := NewDCTNFTMultiTransferFunc(
 		1,
@@ -78,6 +88,7 @@ func createDCTNFTMultiTransferWithMockArguments(selfShard uint32, numShards uint
 			},
 		},
 		1000,
+		createNewDCTDataStorageHandlerWithArgs(globalSettingsHandler, accounts),
 	)
 
 	return multiTransfer
@@ -97,6 +108,7 @@ func TestNewDCTNFTMultiTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		&mock.EpochNotifierStub{},
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		createNewDCTDataStorageHandler(),
 	)
 	assert.True(t, check.IfNil(multiTransfer))
 	assert.Equal(t, ErrNilMarshalizer, err)
@@ -112,6 +124,7 @@ func TestNewDCTNFTMultiTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		&mock.EpochNotifierStub{},
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		createNewDCTDataStorageHandler(),
 	)
 	assert.True(t, check.IfNil(multiTransfer))
 	assert.Equal(t, ErrNilGlobalSettingsHandler, err)
@@ -127,6 +140,7 @@ func TestNewDCTNFTMultiTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		&mock.EpochNotifierStub{},
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		createNewDCTDataStorageHandler(),
 	)
 	assert.True(t, check.IfNil(multiTransfer))
 	assert.Equal(t, ErrNilAccountsAdapter, err)
@@ -142,6 +156,7 @@ func TestNewDCTNFTMultiTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		&mock.EpochNotifierStub{},
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		createNewDCTDataStorageHandler(),
 	)
 	assert.True(t, check.IfNil(multiTransfer))
 	assert.Equal(t, ErrNilShardCoordinator, err)
@@ -157,6 +172,7 @@ func TestNewDCTNFTMultiTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		nil,
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		createNewDCTDataStorageHandler(),
 	)
 	assert.True(t, check.IfNil(multiTransfer))
 	assert.Equal(t, ErrNilEpochHandler, err)
@@ -172,9 +188,26 @@ func TestNewDCTNFTMultiTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		&mock.EpochNotifierStub{},
 		nil,
 		1000,
+		createNewDCTDataStorageHandler(),
 	)
 	assert.True(t, check.IfNil(multiTransfer))
 	assert.Equal(t, ErrNilRolesHandler, err)
+
+	multiTransfer, err = NewDCTNFTMultiTransferFunc(
+		0,
+		&mock.MarshalizerMock{},
+		&mock.GlobalSettingsHandlerStub{},
+		&mock.AccountsStub{},
+		&mock.ShardCoordinatorStub{},
+		vmcommon.BaseOperationCost{},
+		0,
+		&mock.EpochNotifierStub{},
+		&mock.DCTRoleHandlerStub{},
+		1000,
+		nil,
+	)
+	assert.True(t, check.IfNil(multiTransfer))
+	assert.Equal(t, ErrNilDCTNFTStorageHandler, err)
 }
 
 func TestNewDCTNFTMultiTransferFunc(t *testing.T) {
@@ -191,6 +224,7 @@ func TestNewDCTNFTMultiTransferFunc(t *testing.T) {
 		&mock.EpochNotifierStub{},
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		createNewDCTDataStorageHandler(),
 	)
 	assert.False(t, check.IfNil(multiTransfer))
 	assert.Nil(t, err)
@@ -965,8 +999,10 @@ func TestComputeInsufficientQuantityDCTError(t *testing.T) {
 	t.Parallel()
 
 	resErr := computeInsufficientQuantityDCTError([]byte("my-token"), 0)
+	require.NotNil(t, resErr)
 	require.Equal(t, errors.New("insufficient quantity for token: my-token").Error(), resErr.Error())
 
 	resErr = computeInsufficientQuantityDCTError([]byte("my-token-2"), 5)
+	require.NotNil(t, resErr)
 	require.Equal(t, errors.New("insufficient quantity for token: my-token-2 nonce 5").Error(), resErr.Error())
 }

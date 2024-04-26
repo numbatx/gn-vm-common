@@ -13,7 +13,7 @@ import (
 type dctNFTupdate struct {
 	*baseEnabled
 	keyPrefix             []byte
-	marshalizer           vmcommon.Marshalizer
+	dctStorageHandler    vmcommon.DCTNFTStorageHandler
 	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler
 	rolesHandler          vmcommon.DCTRoleHandler
 	gasConfig             vmcommon.BaseOperationCost
@@ -25,14 +25,14 @@ type dctNFTupdate struct {
 func NewDCTNFTUpdateAttributesFunc(
 	funcGasCost uint64,
 	gasConfig vmcommon.BaseOperationCost,
-	marshalizer vmcommon.Marshalizer,
+	dctStorageHandler vmcommon.DCTNFTStorageHandler,
 	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler,
 	rolesHandler vmcommon.DCTRoleHandler,
 	activationEpoch uint32,
 	epochNotifier vmcommon.EpochNotifier,
 ) (*dctNFTupdate, error) {
-	if check.IfNil(marshalizer) {
-		return nil, ErrNilMarshalizer
+	if check.IfNil(dctStorageHandler) {
+		return nil, ErrNilDCTNFTStorageHandler
 	}
 	if check.IfNil(globalSettingsHandler) {
 		return nil, ErrNilGlobalSettingsHandler
@@ -46,7 +46,7 @@ func NewDCTNFTUpdateAttributesFunc(
 
 	e := &dctNFTupdate{
 		keyPrefix:             []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
-		marshalizer:           marshalizer,
+		dctStorageHandler:    dctStorageHandler,
 		funcGasCost:           funcGasCost,
 		mutExecution:          sync.RWMutex{},
 		globalSettingsHandler: globalSettingsHandler,
@@ -112,14 +112,14 @@ func (e *dctNFTupdate) ProcessBuiltinFunction(
 	if nonce == 0 {
 		return nil, ErrNFTDoesNotHaveMetadata
 	}
-	dctData, err := getDCTNFTTokenOnSender(acntSnd, dctTokenKey, nonce, e.marshalizer)
+	dctData, err := e.dctStorageHandler.GetDCTNFTTokenOnSender(acntSnd, dctTokenKey, nonce)
 	if err != nil {
 		return nil, err
 	}
 
 	dctData.TokenMetaData.Attributes = vmInput.Arguments[2]
 
-	_, err = saveDCTNFTToken(acntSnd, dctTokenKey, dctData, e.marshalizer, e.globalSettingsHandler, vmInput.ReturnCallAfterError)
+	_, err = e.dctStorageHandler.SaveDCTNFTToken(acntSnd.AddressBytes(), acntSnd, dctTokenKey, nonce, dctData, true, vmInput.ReturnCallAfterError)
 	if err != nil {
 		return nil, err
 	}

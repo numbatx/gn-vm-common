@@ -17,22 +17,27 @@ func TestNewDCTNFTAddQuantityFunc(t *testing.T) {
 	t.Parallel()
 
 	// nil marshalizer
-	eqf, err := NewDCTNFTAddQuantityFunc(10, nil, nil, nil)
+	eqf, err := NewDCTNFTAddQuantityFunc(10, nil, nil, nil, 0, nil)
 	require.True(t, check.IfNil(eqf))
-	require.Equal(t, ErrNilMarshalizer, err)
+	require.Equal(t, ErrNilDCTNFTStorageHandler, err)
 
 	// nil pause handler
-	eqf, err = NewDCTNFTAddQuantityFunc(10, &mock.MarshalizerMock{}, nil, nil)
+	eqf, err = NewDCTNFTAddQuantityFunc(10, createNewDCTDataStorageHandler(), nil, nil, 0, nil)
 	require.True(t, check.IfNil(eqf))
 	require.Equal(t, ErrNilGlobalSettingsHandler, err)
 
 	// nil roles handler
-	eqf, err = NewDCTNFTAddQuantityFunc(10, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, nil)
+	eqf, err = NewDCTNFTAddQuantityFunc(10, createNewDCTDataStorageHandler(), &mock.GlobalSettingsHandlerStub{}, nil, 0, nil)
 	require.True(t, check.IfNil(eqf))
 	require.Equal(t, ErrNilRolesHandler, err)
 
+	// nil epoch handler
+	eqf, err = NewDCTNFTAddQuantityFunc(10, createNewDCTDataStorageHandler(), &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, nil)
+	require.True(t, check.IfNil(eqf))
+	require.Equal(t, ErrNilEpochHandler, err)
+
 	// should work
-	eqf, err = NewDCTNFTAddQuantityFunc(10, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{})
+	eqf, err = NewDCTNFTAddQuantityFunc(10, createNewDCTDataStorageHandler(), &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
 	require.False(t, check.IfNil(eqf))
 	require.NoError(t, err)
 }
@@ -41,7 +46,7 @@ func TestDctNFTAddQuantity_SetNewGasConfig_NilGasCost(t *testing.T) {
 	t.Parallel()
 
 	defaultGasCost := uint64(10)
-	eqf, _ := NewDCTNFTAddQuantityFunc(defaultGasCost, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{})
+	eqf, _ := NewDCTNFTAddQuantityFunc(defaultGasCost, createNewDCTDataStorageHandler(), &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
 
 	eqf.SetNewGasConfig(nil)
 	require.Equal(t, defaultGasCost, eqf.funcGasCost)
@@ -52,7 +57,7 @@ func TestDctNFTAddQuantity_SetNewGasConfig_ShouldWork(t *testing.T) {
 
 	defaultGasCost := uint64(10)
 	newGasCost := uint64(37)
-	eqf, _ := NewDCTNFTAddQuantityFunc(defaultGasCost, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{})
+	eqf, _ := NewDCTNFTAddQuantityFunc(defaultGasCost, createNewDCTDataStorageHandler(), &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
 
 	eqf.SetNewGasConfig(
 		&vmcommon.GasCost{
@@ -68,7 +73,7 @@ func TestDctNFTAddQuantity_SetNewGasConfig_ShouldWork(t *testing.T) {
 func TestDctNFTAddQuantity_ProcessBuiltinFunctionErrorOnCheckDCTNFTCreateBurnAddInput(t *testing.T) {
 	t.Parallel()
 
-	eqf, _ := NewDCTNFTAddQuantityFunc(10, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{})
+	eqf, _ := NewDCTNFTAddQuantityFunc(10, createNewDCTDataStorageHandler(), &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
 
 	// nil vm input
 	output, err := eqf.ProcessBuiltinFunction(mock.NewAccountWrapMock([]byte("addr")), nil, nil)
@@ -169,7 +174,7 @@ func TestDctNFTAddQuantity_ProcessBuiltinFunctionErrorOnCheckDCTNFTCreateBurnAdd
 func TestDctNFTAddQuantity_ProcessBuiltinFunctionInvalidNumberOfArguments(t *testing.T) {
 	t.Parallel()
 
-	eqf, _ := NewDCTNFTAddQuantityFunc(10, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{})
+	eqf, _ := NewDCTNFTAddQuantityFunc(10, createNewDCTDataStorageHandler(), &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
 	output, err := eqf.ProcessBuiltinFunction(
 		mock.NewAccountWrapMock([]byte("addr")),
 		nil,
@@ -196,7 +201,7 @@ func TestDctNFTAddQuantity_ProcessBuiltinFunctionCheckAllowedToExecuteError(t *t
 			return localErr
 		},
 	}
-	eqf, _ := NewDCTNFTAddQuantityFunc(10, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, rolesHandler)
+	eqf, _ := NewDCTNFTAddQuantityFunc(10, createNewDCTDataStorageHandler(), &mock.GlobalSettingsHandlerStub{}, rolesHandler, 0, &mock.EpochNotifierStub{})
 	output, err := eqf.ProcessBuiltinFunction(
 		mock.NewAccountWrapMock([]byte("addr")),
 		nil,
@@ -218,7 +223,7 @@ func TestDctNFTAddQuantity_ProcessBuiltinFunctionCheckAllowedToExecuteError(t *t
 func TestDctNFTAddQuantity_ProcessBuiltinFunctionNewSenderShouldErr(t *testing.T) {
 	t.Parallel()
 
-	eqf, _ := NewDCTNFTAddQuantityFunc(10, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{})
+	eqf, _ := NewDCTNFTAddQuantityFunc(10, createNewDCTDataStorageHandler(), &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
 	output, err := eqf.ProcessBuiltinFunction(
 		mock.NewAccountWrapMock([]byte("addr")),
 		nil,
@@ -242,7 +247,7 @@ func TestDctNFTAddQuantity_ProcessBuiltinFunctionMetaDataMissing(t *testing.T) {
 	t.Parallel()
 
 	marshalizer := &mock.MarshalizerMock{}
-	eqf, _ := NewDCTNFTAddQuantityFunc(10, marshalizer, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{})
+	eqf, _ := NewDCTNFTAddQuantityFunc(10, createNewDCTDataStorageHandler(), &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
 
 	userAcc := mock.NewAccountWrapMock([]byte("addr"))
 	dctData := &dct.DCToken{}
@@ -276,7 +281,7 @@ func TestDctNFTAddQuantity_ProcessBuiltinFunctionShouldErrOnSaveBecauseTokenIsPa
 		},
 	}
 
-	eqf, _ := NewDCTNFTAddQuantityFunc(10, marshalizer, globalSettingsHandler, &mock.DCTRoleHandlerStub{})
+	eqf, _ := NewDCTNFTAddQuantityFunc(10, createNewDCTDataStorageHandlerWithArgs(globalSettingsHandler, &mock.AccountsStub{}), globalSettingsHandler, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
 
 	userAcc := mock.NewAccountWrapMock([]byte("addr"))
 	dctData := &dct.DCToken{
@@ -318,7 +323,7 @@ func TestDctNFTAddQuantity_ProcessBuiltinFunctionShouldWork(t *testing.T) {
 	expectedValue := big.NewInt(0).Add(initialValue, valueToAdd)
 
 	marshalizer := &mock.MarshalizerMock{}
-	eqf, _ := NewDCTNFTAddQuantityFunc(10, marshalizer, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{})
+	eqf, _ := NewDCTNFTAddQuantityFunc(10, createNewDCTDataStorageHandler(), &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
 
 	userAcc := mock.NewAccountWrapMock([]byte("addr"))
 	dctData := &dct.DCToken{
@@ -349,7 +354,7 @@ func TestDctNFTAddQuantity_ProcessBuiltinFunctionShouldWork(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, vmcommon.Ok, output.ReturnCode)
 
-	res, err := userAcc.AccountDataHandler().RetrieveValue([]byte(key))
+	res, err := userAcc.AccountDataHandler().RetrieveValue(tokenKey)
 	require.NoError(t, err)
 	require.NotNil(t, res)
 

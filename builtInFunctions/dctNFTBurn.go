@@ -12,7 +12,7 @@ import (
 type dctNFTBurn struct {
 	baseAlwaysActive
 	keyPrefix             []byte
-	marshalizer           vmcommon.Marshalizer
+	dctStorageHandler    vmcommon.DCTNFTStorageHandler
 	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler
 	rolesHandler          vmcommon.DCTRoleHandler
 	funcGasCost           uint64
@@ -22,12 +22,12 @@ type dctNFTBurn struct {
 // NewDCTNFTBurnFunc returns the dct NFT burn built-in function component
 func NewDCTNFTBurnFunc(
 	funcGasCost uint64,
-	marshalizer vmcommon.Marshalizer,
+	dctStorageHandler vmcommon.DCTNFTStorageHandler,
 	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler,
 	rolesHandler vmcommon.DCTRoleHandler,
 ) (*dctNFTBurn, error) {
-	if check.IfNil(marshalizer) {
-		return nil, ErrNilMarshalizer
+	if check.IfNil(dctStorageHandler) {
+		return nil, ErrNilDCTNFTStorageHandler
 	}
 	if check.IfNil(globalSettingsHandler) {
 		return nil, ErrNilGlobalSettingsHandler
@@ -38,7 +38,7 @@ func NewDCTNFTBurnFunc(
 
 	e := &dctNFTBurn{
 		keyPrefix:             []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
-		marshalizer:           marshalizer,
+		dctStorageHandler:    dctStorageHandler,
 		globalSettingsHandler: globalSettingsHandler,
 		rolesHandler:          rolesHandler,
 		funcGasCost:           funcGasCost,
@@ -86,7 +86,7 @@ func (e *dctNFTBurn) ProcessBuiltinFunction(
 
 	dctTokenKey := append(e.keyPrefix, vmInput.Arguments[0]...)
 	nonce := big.NewInt(0).SetBytes(vmInput.Arguments[1]).Uint64()
-	dctData, err := getDCTNFTTokenOnSender(acntSnd, dctTokenKey, nonce, e.marshalizer)
+	dctData, err := e.dctStorageHandler.GetDCTNFTTokenOnSender(acntSnd, dctTokenKey, nonce)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func (e *dctNFTBurn) ProcessBuiltinFunction(
 
 	dctData.Value.Sub(dctData.Value, quantityToBurn)
 
-	_, err = saveDCTNFTToken(acntSnd, dctTokenKey, dctData, e.marshalizer, e.globalSettingsHandler, vmInput.ReturnCallAfterError)
+	_, err = e.dctStorageHandler.SaveDCTNFTToken(acntSnd.AddressBytes(), acntSnd, dctTokenKey, nonce, dctData, false, vmInput.ReturnCallAfterError)
 	if err != nil {
 		return nil, err
 	}

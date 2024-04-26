@@ -1,9 +1,16 @@
 package builtInFunctions
 
 import (
+	"bytes"
+	"fmt"
 	"math/big"
 
 	vmcommon "github.com/numbatx/gn-vm-common"
+)
+
+const (
+	dctIdentifierSeparator  = "-"
+	dctRandomSequenceLength = 6
 )
 
 func addDCTEntryInVMOutput(vmOutput *vmcommon.VMOutput, identifier []byte, tokenID []byte, nonce uint64, value *big.Int, args ...[]byte) {
@@ -33,4 +40,20 @@ func newEntryForDCT(identifier, tokenID []byte, nonce uint64, value *big.Int, ar
 	}
 
 	return logEntry
+}
+
+func extractTokenIdentifierAndNonceDCTWipe(args []byte) ([]byte, uint64) {
+	argsSplit := bytes.Split(args, []byte(dctIdentifierSeparator))
+	if len(argsSplit) < 2 {
+		return args, 0
+	}
+
+	if len(argsSplit[1]) <= dctRandomSequenceLength {
+		return args, 0
+	}
+
+	identifier := []byte(fmt.Sprintf("%s-%s", argsSplit[0], argsSplit[1][:dctRandomSequenceLength]))
+	nonce := big.NewInt(0).SetBytes(argsSplit[1][dctRandomSequenceLength:])
+
+	return identifier, nonce.Uint64()
 }

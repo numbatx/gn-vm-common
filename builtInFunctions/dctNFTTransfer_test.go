@@ -28,6 +28,7 @@ func createNftTransferWithStubArguments() *dctNFTTransfer {
 		vmcommon.BaseOperationCost{},
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		createNewDCTDataStorageHandler(),
 		&mock.EpochNotifierStub{},
 	)
 
@@ -76,6 +77,7 @@ func createNftTransferWithMockArguments(selfShard uint32, numShards uint32, glob
 			},
 		},
 		1000,
+		createNewDCTDataStorageHandlerWithArgs(globalSettingsHandler, accounts),
 		&mock.EpochNotifierStub{},
 	)
 
@@ -150,8 +152,10 @@ func testNFTTokenShouldExist(
 	expectedValue *big.Int,
 ) {
 	tokenId := append(keyPrefix, tokenName...)
-	dctData, err := getDCTNFTTokenOnSender(account.(vmcommon.UserAccountHandler), tokenId, nonce, marshalizer)
-	require.Nil(tb, err)
+	dctNFTTokenKey := computeDCTNFTTokenKey(tokenId, nonce)
+	dctData := &dct.DCToken{Value: big.NewInt(0), Type: uint32(core.Fungible)}
+	marshaledData, _ := account.(vmcommon.UserAccountHandler).AccountDataHandler().RetrieveValue(dctNFTTokenKey)
+	_ = marshalizer.Unmarshal(dctData, marshaledData)
 	assert.Equal(tb, expectedValue, dctData.Value)
 }
 
@@ -167,6 +171,7 @@ func TestNewDCTNFTTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		vmcommon.BaseOperationCost{},
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		createNewDCTDataStorageHandler(),
 		&mock.EpochNotifierStub{},
 	)
 	assert.True(t, check.IfNil(nftTransfer))
@@ -181,6 +186,7 @@ func TestNewDCTNFTTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		vmcommon.BaseOperationCost{},
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		createNewDCTDataStorageHandler(),
 		&mock.EpochNotifierStub{},
 	)
 	assert.True(t, check.IfNil(nftTransfer))
@@ -195,6 +201,7 @@ func TestNewDCTNFTTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		vmcommon.BaseOperationCost{},
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		createNewDCTDataStorageHandler(),
 		&mock.EpochNotifierStub{},
 	)
 	assert.True(t, check.IfNil(nftTransfer))
@@ -209,6 +216,7 @@ func TestNewDCTNFTTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		vmcommon.BaseOperationCost{},
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		createNewDCTDataStorageHandler(),
 		&mock.EpochNotifierStub{},
 	)
 	assert.True(t, check.IfNil(nftTransfer))
@@ -223,6 +231,7 @@ func TestNewDCTNFTTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		vmcommon.BaseOperationCost{},
 		nil,
 		1000,
+		createNewDCTDataStorageHandler(),
 		&mock.EpochNotifierStub{},
 	)
 	assert.True(t, check.IfNil(nftTransfer))
@@ -237,10 +246,26 @@ func TestNewDCTNFTTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		vmcommon.BaseOperationCost{},
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		createNewDCTDataStorageHandler(),
 		nil,
 	)
 	assert.True(t, check.IfNil(nftTransfer))
 	assert.Equal(t, ErrNilEpochHandler, err)
+
+	nftTransfer, err = NewDCTNFTTransferFunc(
+		0,
+		&mock.MarshalizerMock{},
+		&mock.GlobalSettingsHandlerStub{},
+		&mock.AccountsStub{},
+		&mock.ShardCoordinatorStub{},
+		vmcommon.BaseOperationCost{},
+		&mock.DCTRoleHandlerStub{},
+		1000,
+		nil,
+		&mock.EpochNotifierStub{},
+	)
+	assert.True(t, check.IfNil(nftTransfer))
+	assert.Equal(t, ErrNilDCTNFTStorageHandler, err)
 }
 
 func TestNewDCTNFTTransferFunc(t *testing.T) {
@@ -255,6 +280,7 @@ func TestNewDCTNFTTransferFunc(t *testing.T) {
 		vmcommon.BaseOperationCost{},
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		createNewDCTDataStorageHandler(),
 		&mock.EpochNotifierStub{},
 	)
 	assert.False(t, check.IfNil(nftTransfer))

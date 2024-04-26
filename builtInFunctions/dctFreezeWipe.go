@@ -78,7 +78,8 @@ func (e *dctFreezeWipe) ProcessBuiltinFunction(
 
 	vmOutput := &vmcommon.VMOutput{ReturnCode: vmcommon.Ok}
 	if e.wipe {
-		addDCTEntryInVMOutput(vmOutput, []byte(core.BuiltInFunctionDCTWipe), vmInput.Arguments[0], 0, big.NewInt(0), vmInput.CallerAddr, acntDst.AddressBytes())
+		identifier, nonce := extractTokenIdentifierAndNonceDCTWipe(vmInput.Arguments[0])
+		addDCTEntryInVMOutput(vmOutput, []byte(core.BuiltInFunctionDCTWipe), identifier, nonce, big.NewInt(0), vmInput.CallerAddr, acntDst.AddressBytes())
 	}
 
 	return vmOutput, nil
