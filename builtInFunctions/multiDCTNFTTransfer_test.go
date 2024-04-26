@@ -30,6 +30,7 @@ func createDCTNFTMultiTransferWithStubArguments() *dctNFTMultiTransfer {
 		&mock.DCTRoleHandlerStub{},
 		1000,
 		0,
+		0,
 		createNewDCTDataStorageHandler(),
 	)
 
@@ -90,6 +91,7 @@ func createDCTNFTMultiTransferWithMockArguments(selfShard uint32, numShards uint
 		},
 		1000,
 		0,
+		0,
 		createNewDCTDataStorageHandlerWithArgs(globalSettingsHandler, accounts),
 	)
 
@@ -111,6 +113,7 @@ func TestNewDCTNFTMultiTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		&mock.DCTRoleHandlerStub{},
 		1000,
 		0,
+		0,
 		createNewDCTDataStorageHandler(),
 	)
 	assert.True(t, check.IfNil(multiTransfer))
@@ -127,6 +130,7 @@ func TestNewDCTNFTMultiTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		&mock.EpochNotifierStub{},
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		0,
 		0,
 		createNewDCTDataStorageHandler(),
 	)
@@ -145,6 +149,7 @@ func TestNewDCTNFTMultiTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		&mock.DCTRoleHandlerStub{},
 		1000,
 		0,
+		0,
 		createNewDCTDataStorageHandler(),
 	)
 	assert.True(t, check.IfNil(multiTransfer))
@@ -161,6 +166,7 @@ func TestNewDCTNFTMultiTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		&mock.EpochNotifierStub{},
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		0,
 		0,
 		createNewDCTDataStorageHandler(),
 	)
@@ -179,6 +185,7 @@ func TestNewDCTNFTMultiTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		&mock.DCTRoleHandlerStub{},
 		1000,
 		0,
+		0,
 		createNewDCTDataStorageHandler(),
 	)
 	assert.True(t, check.IfNil(multiTransfer))
@@ -196,6 +203,7 @@ func TestNewDCTNFTMultiTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		nil,
 		1000,
 		0,
+		0,
 		createNewDCTDataStorageHandler(),
 	)
 	assert.True(t, check.IfNil(multiTransfer))
@@ -212,6 +220,7 @@ func TestNewDCTNFTMultiTransferFunc_NilArgumentsShouldErr(t *testing.T) {
 		&mock.EpochNotifierStub{},
 		&mock.DCTRoleHandlerStub{},
 		1000,
+		0,
 		0,
 		nil,
 	)
@@ -234,6 +243,7 @@ func TestNewDCTNFTMultiTransferFunc(t *testing.T) {
 		&mock.DCTRoleHandlerStub{},
 		1000,
 		0,
+		0,
 		createNewDCTDataStorageHandler(),
 	)
 	assert.False(t, check.IfNil(multiTransfer))
@@ -250,7 +260,7 @@ func TestDCTNFTMultiTransfer_SetPayable(t *testing.T) {
 	handler := &mock.PayableHandlerStub{}
 	err = multiTransfer.SetPayableHandler(handler)
 	assert.Nil(t, err)
-	assert.True(t, handler == multiTransfer.payableHandler) //pointer testing
+	assert.True(t, handler == multiTransfer.payableHandler) // pointer testing
 }
 
 func TestDCTNFTMultiTransfer_SetNewGasConfig(t *testing.T) {
@@ -338,7 +348,7 @@ func TestDCTNFTMultiTransfer_ProcessBuiltinFunctionOnSameShardWithScCall(t *test
 	_ = multiTransfer.accounts.SaveAccount(destination)
 	_, _ = multiTransfer.accounts.Commit()
 
-	//reload accounts
+	// reload accounts
 	sender, err = multiTransfer.accounts.LoadAccount(senderAddress)
 	require.Nil(t, err)
 	destination, err = multiTransfer.accounts.LoadAccount(destinationAddress)
@@ -367,13 +377,13 @@ func TestDCTNFTMultiTransfer_ProcessBuiltinFunctionOnSameShardWithScCall(t *test
 	_ = multiTransfer.accounts.SaveAccount(sender)
 	_, _ = multiTransfer.accounts.Commit()
 
-	//reload accounts
+	// reload accounts
 	sender, err = multiTransfer.accounts.LoadAccount(senderAddress)
 	require.Nil(t, err)
 	destination, err = multiTransfer.accounts.LoadAccount(destinationAddress)
 	require.Nil(t, err)
 
-	testNFTTokenShouldExist(t, multiTransfer.marshalizer, sender, token1, tokenNonce, big.NewInt(2)) //3 initial - 1 transferred
+	testNFTTokenShouldExist(t, multiTransfer.marshalizer, sender, token1, tokenNonce, big.NewInt(2)) // 3 initial - 1 transferred
 	testNFTTokenShouldExist(t, multiTransfer.marshalizer, sender, token2, 0, big.NewInt(2))
 	testNFTTokenShouldExist(t, multiTransfer.marshalizer, destination, token1, tokenNonce, big.NewInt(4))
 	testNFTTokenShouldExist(t, multiTransfer.marshalizer, destination, token2, 0, big.NewInt(4))
@@ -414,7 +424,7 @@ func TestDCTNFTMultiTransfer_ProcessBuiltinFunctionOnCrossShardsDestinationDoesN
 	_ = multiTransferSenderShard.accounts.SaveAccount(sender)
 	_, _ = multiTransferSenderShard.accounts.Commit()
 
-	//reload sender account
+	// reload sender account
 	sender, err = multiTransferSenderShard.accounts.LoadAccount(senderAddress)
 	require.Nil(t, err)
 
@@ -441,11 +451,11 @@ func TestDCTNFTMultiTransfer_ProcessBuiltinFunctionOnCrossShardsDestinationDoesN
 	_ = multiTransferSenderShard.accounts.SaveAccount(sender)
 	_, _ = multiTransferSenderShard.accounts.Commit()
 
-	//reload sender account
+	// reload sender account
 	sender, err = multiTransferSenderShard.accounts.LoadAccount(senderAddress)
 	require.Nil(t, err)
 
-	testNFTTokenShouldExist(t, multiTransferSenderShard.marshalizer, sender, token1, tokenNonce, big.NewInt(2)) //3 initial - 1 transferred
+	testNFTTokenShouldExist(t, multiTransferSenderShard.marshalizer, sender, token1, tokenNonce, big.NewInt(2)) // 3 initial - 1 transferred
 
 	funcName, args := extractScResultsFromVmOutput(t, vmOutput)
 
@@ -509,7 +519,7 @@ func TestDCTNFTMultiTransfer_ProcessBuiltinFunctionOnCrossShardsDestinationAddTo
 	_ = multiTransferSenderShard.accounts.SaveAccount(sender)
 	_, _ = multiTransferSenderShard.accounts.Commit()
 
-	//reload sender account
+	// reload sender account
 	sender, err = multiTransferSenderShard.accounts.LoadAccount(senderAddress)
 	require.Nil(t, err)
 
@@ -536,11 +546,11 @@ func TestDCTNFTMultiTransfer_ProcessBuiltinFunctionOnCrossShardsDestinationAddTo
 	_ = multiTransferSenderShard.accounts.SaveAccount(sender)
 	_, _ = multiTransferSenderShard.accounts.Commit()
 
-	//reload sender account
+	// reload sender account
 	sender, err = multiTransferSenderShard.accounts.LoadAccount(senderAddress)
 	require.Nil(t, err)
 
-	testNFTTokenShouldExist(t, multiTransferSenderShard.marshalizer, sender, token1, tokenNonce, big.NewInt(2)) //3 initial - 1 transferred
+	testNFTTokenShouldExist(t, multiTransferSenderShard.marshalizer, sender, token1, tokenNonce, big.NewInt(2)) // 3 initial - 1 transferred
 
 	_, args := extractScResultsFromVmOutput(t, vmOutput)
 
@@ -600,7 +610,7 @@ func TestDCTNFTMultiTransfer_ProcessBuiltinFunctionOnCrossShardsOneTransfer(t *t
 	_ = multiTransferSenderShard.accounts.SaveAccount(sender)
 	_, _ = multiTransferSenderShard.accounts.Commit()
 
-	//reload sender account
+	// reload sender account
 	sender, err = multiTransferSenderShard.accounts.LoadAccount(senderAddress)
 	require.Nil(t, err)
 
@@ -623,11 +633,11 @@ func TestDCTNFTMultiTransfer_ProcessBuiltinFunctionOnCrossShardsOneTransfer(t *t
 	_ = multiTransferSenderShard.accounts.SaveAccount(sender)
 	_, _ = multiTransferSenderShard.accounts.Commit()
 
-	//reload sender account
+	// reload sender account
 	sender, err = multiTransferSenderShard.accounts.LoadAccount(senderAddress)
 	require.Nil(t, err)
 
-	testNFTTokenShouldExist(t, multiTransferSenderShard.marshalizer, sender, token1, tokenNonce, big.NewInt(2)) //3 initial - 1 transferred
+	testNFTTokenShouldExist(t, multiTransferSenderShard.marshalizer, sender, token1, tokenNonce, big.NewInt(2)) // 3 initial - 1 transferred
 	_, args := extractScResultsFromVmOutput(t, vmOutput)
 
 	destinationNumTokens1 := big.NewInt(1000)
@@ -692,7 +702,7 @@ func TestDCTNFTMultiTransfer_ProcessBuiltinFunctionOnCrossShardsDestinationHolds
 	_ = multiTransferSenderShard.accounts.SaveAccount(sender)
 	_, _ = multiTransferSenderShard.accounts.Commit()
 
-	//reload sender account
+	// reload sender account
 	sender, err = multiTransferSenderShard.accounts.LoadAccount(senderAddress)
 	require.Nil(t, err)
 
@@ -715,12 +725,12 @@ func TestDCTNFTMultiTransfer_ProcessBuiltinFunctionOnCrossShardsDestinationHolds
 	_ = multiTransferSenderShard.accounts.SaveAccount(sender)
 	_, _ = multiTransferSenderShard.accounts.Commit()
 
-	//reload sender account
+	// reload sender account
 	sender, err = multiTransferSenderShard.accounts.LoadAccount(senderAddress)
 	require.Nil(t, err)
 
-	testNFTTokenShouldExist(t, multiTransferSenderShard.marshalizer, sender, token1, tokenNonce, big.NewInt(2)) //3 initial - 1 transferred
-	testNFTTokenShouldExist(t, multiTransferSenderShard.marshalizer, sender, token2, 0, big.NewInt(2))          //3 initial - 1 transferred
+	testNFTTokenShouldExist(t, multiTransferSenderShard.marshalizer, sender, token1, tokenNonce, big.NewInt(2)) // 3 initial - 1 transferred
+	testNFTTokenShouldExist(t, multiTransferSenderShard.marshalizer, sender, token2, 0, big.NewInt(2))          // 3 initial - 1 transferred
 	_, args := extractScResultsFromVmOutput(t, vmOutput)
 
 	destinationNumTokens1 := big.NewInt(1000)
@@ -789,7 +799,7 @@ func TestDCTNFTMultiTransfer_ProcessBuiltinFunctionOnCrossShardsShouldErr(t *tes
 	_ = multiTransferSenderShard.accounts.SaveAccount(sender)
 	_, _ = multiTransferSenderShard.accounts.Commit()
 
-	//reload sender account
+	// reload sender account
 	sender, err = multiTransferSenderShard.accounts.LoadAccount(senderAddress)
 	require.Nil(t, err)
 
@@ -812,11 +822,11 @@ func TestDCTNFTMultiTransfer_ProcessBuiltinFunctionOnCrossShardsShouldErr(t *tes
 	_ = multiTransferSenderShard.accounts.SaveAccount(sender)
 	_, _ = multiTransferSenderShard.accounts.Commit()
 
-	//reload sender account
+	// reload sender account
 	sender, err = multiTransferSenderShard.accounts.LoadAccount(senderAddress)
 	require.Nil(t, err)
 
-	testNFTTokenShouldExist(t, multiTransferSenderShard.marshalizer, sender, token1, tokenNonce, big.NewInt(2)) //3 initial - 1 transferred
+	testNFTTokenShouldExist(t, multiTransferSenderShard.marshalizer, sender, token1, tokenNonce, big.NewInt(2)) // 3 initial - 1 transferred
 	testNFTTokenShouldExist(t, multiTransferSenderShard.marshalizer, sender, token2, 0, big.NewInt(2))
 	_, args := extractScResultsFromVmOutput(t, vmOutput)
 
@@ -880,7 +890,7 @@ func TestDCTNFTMultiTransfer_SndDstFrozen(t *testing.T) {
 
 	_ = transferFunc.accounts.SaveAccount(sender)
 	_, _ = transferFunc.accounts.Commit()
-	//reload sender account
+	// reload sender account
 	sender, err = transferFunc.accounts.LoadAccount(senderAddress)
 	require.Nil(t, err)
 
@@ -944,7 +954,7 @@ func TestDCTNFTMultiTransfer_NotEnoughGas(t *testing.T) {
 	createDCTNFTToken(token2, core.Fungible, 0, initialTokens, transferFunc.marshalizer, sender.(vmcommon.UserAccountHandler))
 	_ = transferFunc.accounts.SaveAccount(sender)
 	_, _ = transferFunc.accounts.Commit()
-	//reload sender account
+	// reload sender account
 	sender, err = transferFunc.accounts.LoadAccount(senderAddress)
 	require.Nil(t, err)
 
@@ -1015,4 +1025,55 @@ func TestComputeInsufficientQuantityDCTError(t *testing.T) {
 	resErr = computeInsufficientQuantityDCTError([]byte("my-token-2"), 5)
 	require.NotNil(t, resErr)
 	require.Equal(t, errors.New("insufficient quantity for token: my-token-2 nonce 5").Error(), resErr.Error())
+}
+
+func TestDCTNFTMultiTransfer_EpochChange(t *testing.T) {
+	t.Parallel()
+
+	var functionHandler vmcommon.EpochSubscriberHandler
+	notifier := &mock.EpochNotifierStub{
+		RegisterNotifyHandlerCalled: func(handler vmcommon.EpochSubscriberHandler) {
+			functionHandler = handler
+		},
+	}
+	transferFunc, _ := NewDCTNFTMultiTransferFunc(
+		0,
+		&mock.MarshalizerMock{},
+		&mock.GlobalSettingsHandlerStub{},
+		&mock.AccountsStub{},
+		&mock.ShardCoordinatorStub{},
+		vmcommon.BaseOperationCost{},
+		0,
+		notifier,
+		&mock.DCTRoleHandlerStub{},
+		1,
+		2,
+		3,
+		createNewDCTDataStorageHandler(),
+	)
+
+	functionHandler.EpochConfirmed(0, 0)
+	assert.False(t, transferFunc.flagTransferToMeta.IsSet())
+	assert.False(t, transferFunc.flagCheckCorrectTokenID.IsSet())
+	assert.False(t, transferFunc.flagCheckFunctionArgument.IsSet())
+
+	functionHandler.EpochConfirmed(1, 0)
+	assert.True(t, transferFunc.flagTransferToMeta.IsSet())
+	assert.False(t, transferFunc.flagCheckCorrectTokenID.IsSet())
+	assert.False(t, transferFunc.flagCheckFunctionArgument.IsSet())
+
+	functionHandler.EpochConfirmed(2, 0)
+	assert.True(t, transferFunc.flagTransferToMeta.IsSet())
+	assert.True(t, transferFunc.flagCheckCorrectTokenID.IsSet())
+	assert.False(t, transferFunc.flagCheckFunctionArgument.IsSet())
+
+	functionHandler.EpochConfirmed(3, 0)
+	assert.True(t, transferFunc.flagTransferToMeta.IsSet())
+	assert.True(t, transferFunc.flagCheckCorrectTokenID.IsSet())
+	assert.True(t, transferFunc.flagCheckFunctionArgument.IsSet())
+
+	functionHandler.EpochConfirmed(4, 0)
+	assert.True(t, transferFunc.flagTransferToMeta.IsSet())
+	assert.True(t, transferFunc.flagCheckCorrectTokenID.IsSet())
+	assert.True(t, transferFunc.flagCheckFunctionArgument.IsSet())
 }

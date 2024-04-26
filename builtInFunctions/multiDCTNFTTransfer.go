@@ -16,21 +16,23 @@ import (
 
 type dctNFTMultiTransfer struct {
 	*baseEnabled
-	keyPrefix                      []byte
-	marshalizer                    vmcommon.Marshalizer
-	globalSettingsHandler          vmcommon.DCTGlobalSettingsHandler
-	payableHandler                 vmcommon.PayableHandler
-	funcGasCost                    uint64
-	accounts                       vmcommon.AccountsAdapter
-	shardCoordinator               vmcommon.Coordinator
-	gasConfig                      vmcommon.BaseOperationCost
-	mutExecution                   sync.RWMutex
-	dctStorageHandler             vmcommon.DCTNFTStorageHandler
-	rolesHandler                   vmcommon.DCTRoleHandler
-	transferToMetaEnableEpoch      uint32
-	flagTransferToMeta             atomic.Flag
-	checkCorrectTokenIDEnableEpoch uint32
-	flagCheckCorrectTokenID        atomic.Flag
+	keyPrefix                        []byte
+	marshalizer                      vmcommon.Marshalizer
+	globalSettingsHandler            vmcommon.DCTGlobalSettingsHandler
+	payableHandler                   vmcommon.PayableHandler
+	funcGasCost                      uint64
+	accounts                         vmcommon.AccountsAdapter
+	shardCoordinator                 vmcommon.Coordinator
+	gasConfig                        vmcommon.BaseOperationCost
+	mutExecution                     sync.RWMutex
+	dctStorageHandler               vmcommon.DCTNFTStorageHandler
+	rolesHandler                     vmcommon.DCTRoleHandler
+	transferToMetaEnableEpoch        uint32
+	flagTransferToMeta               atomic.Flag
+	checkCorrectTokenIDEnableEpoch   uint32
+	flagCheckCorrectTokenID          atomic.Flag
+	checkFunctionArgumentEnableEpoch uint32
+	flagCheckFunctionArgument        atomic.Flag
 }
 
 const argumentsPerTransfer = uint64(3)
@@ -48,6 +50,7 @@ func NewDCTNFTMultiTransferFunc(
 	roleHandler vmcommon.DCTRoleHandler,
 	transferToMetaEnableEpoch uint32,
 	checkCorrectTokenIDEnableEpoch uint32,
+	checkFunctionArgumentEnableEpoch uint32,
 	dctStorageHandler vmcommon.DCTNFTStorageHandler,
 ) (*dctNFTMultiTransfer, error) {
 	if check.IfNil(marshalizer) {
@@ -73,19 +76,20 @@ func NewDCTNFTMultiTransferFunc(
 	}
 
 	e := &dctNFTMultiTransfer{
-		keyPrefix:                      []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
-		marshalizer:                    marshalizer,
-		globalSettingsHandler:          globalSettingsHandler,
-		funcGasCost:                    funcGasCost,
-		accounts:                       accounts,
-		shardCoordinator:               shardCoordinator,
-		gasConfig:                      gasConfig,
-		mutExecution:                   sync.RWMutex{},
-		payableHandler:                 &disabledPayableHandler{},
-		rolesHandler:                   roleHandler,
-		transferToMetaEnableEpoch:      transferToMetaEnableEpoch,
-		checkCorrectTokenIDEnableEpoch: checkCorrectTokenIDEnableEpoch,
-		dctStorageHandler:             dctStorageHandler,
+		keyPrefix:                        []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
+		marshalizer:                      marshalizer,
+		globalSettingsHandler:            globalSettingsHandler,
+		funcGasCost:                      funcGasCost,
+		accounts:                         accounts,
+		shardCoordinator:                 shardCoordinator,
+		gasConfig:                        gasConfig,
+		mutExecution:                     sync.RWMutex{},
+		payableHandler:                   &disabledPayableHandler{},
+		rolesHandler:                     roleHandler,
+		transferToMetaEnableEpoch:        transferToMetaEnableEpoch,
+		checkCorrectTokenIDEnableEpoch:   checkCorrectTokenIDEnableEpoch,
+		checkFunctionArgumentEnableEpoch: checkFunctionArgumentEnableEpoch,
+		dctStorageHandler:               dctStorageHandler,
 	}
 
 	e.baseEnabled = &baseEnabled{
@@ -106,6 +110,8 @@ func (e *dctNFTMultiTransfer) EpochConfirmed(epoch uint32, nonce uint64) {
 	log.Debug("DCT NFT transfer to metachain flag", "enabled", e.flagTransferToMeta.IsSet())
 	e.flagCheckCorrectTokenID.SetValue(epoch >= e.checkCorrectTokenIDEnableEpoch)
 	log.Debug("DCT multi transfer check correct tokenID for transfer role", "enabled", e.flagCheckCorrectTokenID.IsSet())
+	e.flagCheckFunctionArgument.SetValue(epoch >= e.checkFunctionArgumentEnableEpoch)
+	log.Debug("DCT multi transfer check function argument", "enabled", e.flagCheckFunctionArgument.IsSet())
 }
 
 // SetPayableHandler will set the payable handler to the function
@@ -176,7 +182,7 @@ func (e *dctNFTMultiTransfer) ProcessBuiltinFunction(
 		return nil, fmt.Errorf("%w, invalid number of arguments", ErrInvalidArguments)
 	}
 
-	verifyPayable := mustVerifyPayable(vmInput, int(minNumOfArguments))
+	verifyPayable := mustVerifyPayable(vmInput, int(minNumOfArguments), e.flagCheckFunctionArgument.IsSet())
 	vmOutput := &vmcommon.VMOutput{GasRemaining: vmInput.GasProvided}
 	vmOutput.Logs = make([]*vmcommon.LogEntry, 0, numOfTransfers)
 	startIndex := uint64(1)
@@ -280,7 +286,7 @@ func (e *dctNFTMultiTransfer) processDCTNFTMultiTransferOnSenderShard(
 		return nil, ErrNotEnoughGas
 	}
 
-	verifyPayable := mustVerifyPayable(vmInput, int(minNumOfArguments))
+	verifyPayable := mustVerifyPayable(vmInput, int(minNumOfArguments), e.flagCheckFunctionArgument.IsSet())
 	acntDst, err := e.loadAccountIfInShard(dstAddress)
 	if err != nil {
 		return nil, err
@@ -472,7 +478,7 @@ func (e *dctNFTMultiTransfer) createDCTNFTOutputTransfers(
 		multiTransferCallArgs = append(multiTransferCallArgs, vmInput.Arguments[minNumOfArguments:]...)
 	}
 
-	isSCCallAfter := determineIsSCCallAfter(vmInput, dstAddress, int(minNumOfArguments))
+	isSCCallAfter := determineIsSCCallAfter(vmInput, dstAddress, int(minNumOfArguments), e.flagCheckFunctionArgument.IsSet())
 
 	if e.shardCoordinator.SelfId() != e.shardCoordinator.ComputeId(dstAddress) {
 		gasToTransfer := uint64(0)
