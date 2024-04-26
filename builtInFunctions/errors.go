@@ -14,14 +14,8 @@ var ErrInsufficientFunds = errors.New("insufficient funds")
 // ErrNilValue signals the value is nil
 var ErrNilValue = errors.New("nil value")
 
-// ErrNilBootStorer signals that the provided boot storer is bil
-var ErrNilBootStorer = errors.New("nil boot storer")
-
 // ErrNilBlockHeader signals that an operation has been attempted to or with a nil block header
 var ErrNilBlockHeader = errors.New("nil block header")
-
-// ErrMissingHeader signals that header of the block is missing
-var ErrMissingHeader = errors.New("missing header")
 
 // ErrNilMarshalizer signals that an operation has been attempted to or with a nil Marshalizer implementation
 var ErrNilMarshalizer = errors.New("nil Marshalizer")
@@ -73,9 +67,6 @@ var ErrNilScAddress = errors.New("nil SC address")
 
 // ErrNilPreProcessor signals that preprocessors is nil
 var ErrNilPreProcessor = errors.New("preprocessor is nil")
-
-// ErrNilGasHandler signals that gas handler is nil
-var ErrNilGasHandler = errors.New("nil gas handler")
 
 // ErrInvalidPeerAccount signals that a peer account is invalid
 var ErrInvalidPeerAccount = errors.New("invalid peer account")
@@ -188,9 +179,6 @@ var ErrNFTDoesNotHaveMetadata = errors.New("NFT does not have metadata")
 // ErrInvalidNFTQuantity signals that invalid NFT quantity was provided
 var ErrInvalidNFTQuantity = errors.New("invalid NFT quantity")
 
-// ErrWrongNFTOnDestination signals the NFT is mismatched on destination - should never happen
-var ErrWrongNFTOnDestination = errors.New("wrong NFT on destination")
-
 // ErrNewNFTDataOnSenderAddress signals that a new NFT data was found on the sender address
 var ErrNewNFTDataOnSenderAddress = errors.New("new NFT data on sender")
 
@@ -211,3 +199,9 @@ var ErrEmptyFunctionName = errors.New("empty function name")
 
 // ErrInsufficientQuantityDCT signals the funds are insufficient for the DCT transfer
 var ErrInsufficientQuantityDCT = errors.New("insufficient quantity")
+
+// ErrNilDCTNFTStorageHandler signals that a nil nft storage handler has been provided
+var ErrNilDCTNFTStorageHandler = errors.New("nil dct nft storage handler")
+
+// ErrNilTransactionHandler signals that a nil transaction handler has been provided
+var ErrNilTransactionHandler = errors.New("nil transaction handler")

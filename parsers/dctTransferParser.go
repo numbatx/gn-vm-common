@@ -50,7 +50,7 @@ func (e *dctTransferParser) ParseDCTTransfers(
 	case core.BuiltInFunctionDCTNFTTransfer:
 		return e.parseSingleDCTNFTTransfer(sndAddr, rcvAddr, args)
 	case core.BuiltInFunctionMultiDCTNFTTransfer:
-		return e.parseMultiDCTNFTTransfer(sndAddr, rcvAddr, args)
+		return e.parseMultiDCTNFTTransfer(rcvAddr, args)
 	default:
 		return nil, ErrNotDCTTransferInput
 	}
@@ -112,7 +112,7 @@ func (e *dctTransferParser) parseSingleDCTNFTTransfer(sndAddr, rcvAddr []byte, a
 	return dctTransfers, nil
 }
 
-func (e *dctTransferParser) parseMultiDCTNFTTransfer(sndAddr, rcvAddr []byte, args [][]byte) (*vmcommon.ParsedDCTTransfers, error) {
+func (e *dctTransferParser) parseMultiDCTNFTTransfer(rcvAddr []byte, args [][]byte) (*vmcommon.ParsedDCTTransfers, error) {
 	if len(args) < MinArgsForMultiDCTNFTTransfer {
 		return nil, ErrNotEnoughArguments
 	}
@@ -125,7 +125,9 @@ func (e *dctTransferParser) parseMultiDCTNFTTransfer(sndAddr, rcvAddr []byte, ar
 	numOfTransfer := big.NewInt(0).SetBytes(args[0])
 	startIndex := uint64(1)
 	isTxAtSender := false
-	if bytes.Equal(sndAddr, rcvAddr) {
+
+	isFirstArgumentAnAddress := len(args[0]) == len(rcvAddr) && !numOfTransfer.IsUint64()
+	if isFirstArgumentAnAddress {
 		dctTransfers.RcvAddr = args[0]
 		numOfTransfer.SetBytes(args[1])
 		startIndex = 2
@@ -170,7 +172,8 @@ func (e *dctTransferParser) createNewDCTTransfer(
 	}
 	if dctTransfer.DCTTokenNonce > 0 {
 		dctTransfer.DCTTokenType = uint32(core.NonFungible)
-		if !isTxAtSender {
+
+		if !isTxAtSender && len(args[tokenStartIndex+2]) > vmcommon.MaxLengthForValueToOptTransfer {
 			transferDCTData := &dct.DCToken{}
 			err := e.marshalizer.Unmarshal(transferDCTData, args[tokenStartIndex+2])
 			if err != nil {

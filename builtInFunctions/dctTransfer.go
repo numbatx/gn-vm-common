@@ -137,7 +137,7 @@ func (e *dctTransfer) ProcessBuiltinFunction(
 	vmOutput := &vmcommon.VMOutput{GasRemaining: gasRemaining, ReturnCode: vmcommon.Ok}
 	if !check.IfNil(acntDst) {
 		if mustVerifyPayable(vmInput, core.MinLenArgumentsDCTTransfer) {
-			isPayable, errPayable := e.payableHandler.IsPayable(vmInput.RecipientAddr)
+			isPayable, errPayable := e.payableHandler.IsPayable(vmInput.CallerAddr, vmInput.RecipientAddr)
 			if errPayable != nil {
 				return nil, errPayable
 			}

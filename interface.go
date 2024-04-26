@@ -3,6 +3,7 @@ package vmcommon
 import (
 	"math/big"
 
+	"github.com/numbatx/gn-core/data"
 	"github.com/numbatx/gn-core/data/dct"
 )
 
@@ -79,7 +80,7 @@ type BlockchainHook interface {
 	IsSmartContract(address []byte) bool
 
 	// IsPayable checks weather the provided address can receive MOA or not
-	IsPayable(address []byte) (bool, error)
+	IsPayable(sndAddress []byte, recvAddress []byte) (bool, error)
 
 	// SaveCompiledCode saves to cache and storage the compiled code
 	SaveCompiledCode(codeHash []byte, code []byte)
@@ -197,7 +198,7 @@ type DCTRoleHandler interface {
 
 // PayableHandler provides IsPayable function which returns if an account is payable or not
 type PayableHandler interface {
-	IsPayable(address []byte) (bool, error)
+	IsPayable(sndAddress, rcvAddress []byte) (bool, error)
 	IsInterfaceNil() bool
 }
 
@@ -221,7 +222,6 @@ type AccountsAdapter interface {
 	Commit() ([]byte, error)
 	JournalLen() int
 	RevertToSnapshot(snapshot int) error
-	GetNumCheckpoints() uint32
 	GetCode(codeHash []byte) []byte
 
 	RootHash() ([]byte, error)
@@ -269,5 +269,28 @@ type EpochNotifier interface {
 // DCTTransferParser can parse single and multi DCT / NFT transfers
 type DCTTransferParser interface {
 	ParseDCTTransfers(sndAddr []byte, rcvAddr []byte, function string, args [][]byte) (*ParsedDCTTransfers, error)
+	IsInterfaceNil() bool
+}
+
+// DCTNFTStorageHandler will handle the storage for the nft metadata
+type DCTNFTStorageHandler interface {
+	SaveDCTNFTToken(senderAddress []byte, acnt UserAccountHandler, dctTokenKey []byte, nonce uint64, dctData *dct.DCToken, isCreation bool, isReturnWithError bool) ([]byte, error)
+	GetDCTNFTTokenOnSender(acnt UserAccountHandler, dctTokenKey []byte, nonce uint64) (*dct.DCToken, error)
+	GetDCTNFTTokenOnDestination(acnt UserAccountHandler, dctTokenKey []byte, nonce uint64) (*dct.DCToken, bool, error)
+	WasAlreadySentToDestinationShardAndUpdateState(tickerID []byte, nonce uint64, dstAddress []byte) (bool, error)
+	SaveNFTMetaDataToSystemAccount(tx data.TransactionHandler) error
+	IsInterfaceNil() bool
+}
+
+// SimpleDCTNFTStorageHandler will handle get of DCT data and save metadata to system acc
+type SimpleDCTNFTStorageHandler interface {
+	GetDCTNFTTokenOnDestination(accnt UserAccountHandler, dctTokenKey []byte, nonce uint64) (*dct.DCToken, bool, error)
+	SaveNFTMetaDataToSystemAccount(tx data.TransactionHandler) error
+	IsInterfaceNil() bool
+}
+
+// CallArgsParser will handle parsing transaction data to function and arguments
+type CallArgsParser interface {
+	ParseData(data string) (string, [][]byte, error)
 	IsInterfaceNil() bool
 }

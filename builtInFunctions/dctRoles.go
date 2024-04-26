@@ -3,6 +3,7 @@ package builtInFunctions
 import (
 	"bytes"
 	"math"
+
 	"github.com/numbatx/gn-core/core"
 	"github.com/numbatx/gn-core/core/check"
 	"github.com/numbatx/gn-core/data/dct"
@@ -68,7 +69,7 @@ func (e *dctRoles) ProcessBuiltinFunction(
 	}
 
 	for _, arg := range vmInput.Arguments[1:] {
-		if !bytes.Equal(arg, []byte("DCTRoleNFTCreateMultiShard")) {
+		if !bytes.Equal(arg, []byte(core.DCTRoleNFTCreateMultiShard)) {
 			continue
 		}
 

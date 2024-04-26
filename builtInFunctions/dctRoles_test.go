@@ -9,7 +9,7 @@ import (
 
 	"github.com/numbatx/gn-core/core"
 	"github.com/numbatx/gn-core/data/dct"
-	vmcommon "github.com/numbatx/gn-vm-common"
+	"github.com/numbatx/gn-vm-common"
 	"github.com/numbatx/gn-vm-common/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -167,7 +167,7 @@ func TestDctRoles_ProcessBuiltinFunction_SetRolesMultiNFT(t *testing.T) {
 					if bytes.Equal(key, roleKey) {
 						roles := &dct.DCTRoles{}
 						_ = marshalizer.Unmarshal(roles, value)
-						require.Equal(t, roles.Roles, [][]byte{[]byte(core.DCTRoleNFTCreate), []byte("DCTRoleNFTCreateMultiShard")})
+						require.Equal(t, roles.Roles, [][]byte{[]byte(core.DCTRoleNFTCreate), []byte(core.DCTRoleNFTCreateMultiShard)})
 						return nil
 					}
 
@@ -186,7 +186,7 @@ func TestDctRoles_ProcessBuiltinFunction_SetRolesMultiNFT(t *testing.T) {
 		VMInput: vmcommon.VMInput{
 			CallValue:  big.NewInt(0),
 			CallerAddr: core.DCTSCAddress,
-			Arguments:  [][]byte{tokenID, []byte(core.DCTRoleNFTCreate), []byte("DCTRoleNFTCreateMultiShard")},
+			Arguments:  [][]byte{tokenID, []byte(core.DCTRoleNFTCreate), []byte(core.DCTRoleNFTCreateMultiShard)},
 		},
 		RecipientAddr: dstAddr,
 	})
