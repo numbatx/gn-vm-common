@@ -6,11 +6,11 @@ import (
 	"math/big"
 
 	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/core/atomic"
 	"github.com/numbatx/gn-core/core/check"
 	"github.com/numbatx/gn-core/data"
 	"github.com/numbatx/gn-core/data/dct"
 	vmcommon "github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/atomic"
 	"github.com/numbatx/gn-vm-common/parsers"
 )
 
@@ -433,7 +433,7 @@ func (e *dctDataStorage) addMetaDataToSystemAccountFromMultiTransfer(
 
 // EpochConfirmed is called whenever a new epoch is confirmed
 func (e *dctDataStorage) EpochConfirmed(epoch uint32, _ uint64) {
-	e.flagSaveToSystemAccount.Toggle(epoch >= e.saveToSystemEnableEpoch)
+	e.flagSaveToSystemAccount.SetValue(epoch >= e.saveToSystemEnableEpoch)
 	log.Debug("DCT NFT save to system account", "enabled", e.flagSaveToSystemAccount.IsSet())
 }
 

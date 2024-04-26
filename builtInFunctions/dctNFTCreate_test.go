@@ -310,7 +310,7 @@ func TestDctNFTCreate_ProcessBuiltinFunctionWithExecByCaller(t *testing.T) {
 
 	accounts := createAccountsAdapterWithMap()
 	dctDataStorage := createNewDCTDataStorageHandlerWithArgs(&mock.GlobalSettingsHandlerStub{}, accounts)
-	dctDataStorage.flagSaveToSystemAccount.Set()
+	_ = dctDataStorage.flagSaveToSystemAccount.SetReturningPrevious()
 	nftCreate, _ := NewDCTNFTCreateFunc(
 		0,
 		vmcommon.BaseOperationCost{},

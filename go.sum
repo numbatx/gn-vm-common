@@ -9,8 +9,8 @@ github.com/mitchellh/mapstructure v1.4.1 h1:CpVNEelQCZBooIPDn+AR3NpivK/TIKU8bDxd
 github.com/mitchellh/mapstructure v1.4.1/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
 github.com/mr-tron/base58 v1.2.0 h1:T/HDJBh4ZCPbU39/+c3rRvE0uKBQlU27+QI8LJ4t64o=
 github.com/mr-tron/base58 v1.2.0/go.mod h1:BinMc/sQntlIE1frQmRFPUoPA1Zkr8VRgBdjWI2mNwc=
-github.com/numbatx/gn-core v0.0.4 h1:9t7BWaxjoSqmNT1mbGXixTGP/bCPtf8ScBAIXXTwALw=
-github.com/numbatx/gn-core v0.0.4/go.mod h1:z2/x6ZnIw5eORek97eUQbhsPO4SusrCa/xfNqym8MVQ=
+github.com/numbatx/gn-core v0.0.6 h1:GcEaGDPRjGrZ2iHAcon5OmfFFM8Ec6vN0n6tPOPiYCM=
+github.com/numbatx/gn-core v0.0.6/go.mod h1:z2/x6ZnIw5eORek97eUQbhsPO4SusrCa/xfNqym8MVQ=
 github.com/numbatx/gn-logger v0.0.2 h1:KItuPNSJ0GNpMngRmW7qflEN2Cr0t4ZK68ycjiisgT0=
 github.com/numbatx/gn-logger v0.0.2/go.mod h1:ZcwEHGDCljhb3pP/CxejKfbJFjz35AuZDf9mgQN0BWg=
 github.com/numbatx/protobuf v1.3.2 h1:AMApZQCmuqVe/4JNb+VAT3PmfebpEpfR56Do7Hob0yE=

@@ -6,9 +6,9 @@ import (
 	"sync"
 
 	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/core/atomic"
 	"github.com/numbatx/gn-core/core/check"
 	"github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/atomic"
 )
 
 type dctBurn struct {

@@ -6,9 +6,9 @@ import (
 	"sync"
 
 	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/core/atomic"
 	"github.com/numbatx/gn-core/core/check"
 	"github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/atomic"
 )
 
 const maxLenForAddNFTQuantity = 32
@@ -65,7 +65,7 @@ func NewDCTNFTAddQuantityFunc(
 
 // EpochConfirmed is called whenever a new epoch is confirmed
 func (e *dctNFTAddQuantity) EpochConfirmed(epoch uint32, _ uint64) {
-	e.flagValueLengthCheck.Toggle(epoch >= e.valueLengthCheckEnableEpoch)
+	e.flagValueLengthCheck.SetValue(epoch >= e.valueLengthCheckEnableEpoch)
 	log.Debug("DCT Add Quantity value length check", "enabled", e.flagValueLengthCheck.IsSet())
 }
 
