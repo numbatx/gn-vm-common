@@ -133,8 +133,7 @@ func (e *dctTransfer) ProcessBuiltinFunction(
 		}
 	}
 
-	isSCCallAfter := vmcommon.IsSmartContractAddress(vmInput.RecipientAddr) && len(vmInput.Arguments) > core.MinLenArgumentsDCTTransfer
-
+	isSCCallAfter := determineIsSCCallAfter(vmInput, vmInput.RecipientAddr, core.MinLenArgumentsDCTTransfer)
 	vmOutput := &vmcommon.VMOutput{GasRemaining: gasRemaining, ReturnCode: vmcommon.Ok}
 	if !check.IfNil(acntDst) {
 		if mustVerifyPayable(vmInput, core.MinLenArgumentsDCTTransfer) {
@@ -195,6 +194,20 @@ func (e *dctTransfer) ProcessBuiltinFunction(
 
 	addDCTEntryInVMOutput(vmOutput, []byte(core.BuiltInFunctionDCTTransfer), tokenID, 0, value, vmInput.CallerAddr, vmInput.RecipientAddr)
 	return vmOutput, nil
+}
+
+func determineIsSCCallAfter(vmInput *vmcommon.ContractCallInput, destAddress []byte, minLenArguments int) bool {
+	if len(vmInput.Arguments) <= minLenArguments {
+		return false
+	}
+	if vmInput.ReturnCallAfterError && vmInput.CallType != vm.AsynchronousCallBack {
+		return false
+	}
+	if !vmcommon.IsSmartContractAddress(destAddress) {
+		return false
+	}
+
+	return true
 }
 
 func mustVerifyPayable(vmInput *vmcommon.ContractCallInput, minLenArguments int) bool {

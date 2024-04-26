@@ -20,6 +20,7 @@ type ArgsCreateBuiltInFunctionContainer struct {
 	DCTTransferRoleEnableEpoch         uint32
 	GlobalMintBurnDisableEpoch          uint32
 	DCTTransferToMetaEnableEpoch       uint32
+	NFTCreateMultiShardEnableEpoch      uint32
 }
 
 type builtInFuncFactory struct {
@@ -35,6 +36,7 @@ type builtInFuncFactory struct {
 	dctTransferRoleEnableEpoch         uint32
 	globalMintBurnDisableEpoch          uint32
 	dctTransferToMetaEnableEpoch       uint32
+	nftCreateMultiShardEnableEpoch      uint32
 }
 
 // NewBuiltInFunctionsFactory creates a factory which will instantiate the built in functions contracts
@@ -66,6 +68,7 @@ func NewBuiltInFunctionsFactory(args ArgsCreateBuiltInFunctionContainer) (*built
 		dctTransferRoleEnableEpoch:         args.DCTTransferRoleEnableEpoch,
 		globalMintBurnDisableEpoch:          args.GlobalMintBurnDisableEpoch,
 		dctTransferToMetaEnableEpoch:       args.DCTTransferToMetaEnableEpoch,
+		nftCreateMultiShardEnableEpoch:      args.NFTCreateMultiShardEnableEpoch,
 	}
 
 	var err error

@@ -1,13 +1,15 @@
 package builtInFunctions
 
 import (
+	"bytes"
 	"errors"
+	"math"
 	"math/big"
 	"testing"
 
 	"github.com/numbatx/gn-core/core"
 	"github.com/numbatx/gn-core/data/dct"
-	"github.com/numbatx/gn-vm-common"
+	vmcommon "github.com/numbatx/gn-vm-common"
 	"github.com/numbatx/gn-vm-common/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -142,6 +144,55 @@ func TestDctRoles_ProcessBuiltinFunction_SetRolesShouldWork(t *testing.T) {
 		},
 	})
 	require.Nil(t, err)
+}
+
+func TestDctRoles_ProcessBuiltinFunction_SetRolesMultiNFT(t *testing.T) {
+	t.Parallel()
+
+	marshalizer := &mock.MarshalizerMock{}
+	dctRolesF, _ := NewDCTRolesFunc(marshalizer, true)
+
+	tokenID := []byte("tokenID")
+	roleKey := append(roleKeyPrefix, tokenID...)
+
+	saveNonceCalled := false
+	acc := &mock.UserAccountStub{
+		AccountDataHandlerCalled: func() vmcommon.AccountDataHandler {
+			return &mock.DataTrieTrackerStub{
+				RetrieveValueCalled: func(key []byte) ([]byte, error) {
+					roles := &dct.DCTRoles{}
+					return marshalizer.Marshal(roles)
+				},
+				SaveKeyValueCalled: func(key []byte, value []byte) error {
+					if bytes.Equal(key, roleKey) {
+						roles := &dct.DCTRoles{}
+						_ = marshalizer.Unmarshal(roles, value)
+						require.Equal(t, roles.Roles, [][]byte{[]byte(core.DCTRoleNFTCreate), []byte("DCTRoleNFTCreateMultiShard")})
+						return nil
+					}
+
+					if bytes.Equal(key, getNonceKey(tokenID)) {
+						saveNonceCalled = true
+						require.Equal(t, uint64(math.MaxUint64/256), big.NewInt(0).SetBytes(value).Uint64())
+					}
+
+					return nil
+				},
+			}
+		},
+	}
+	dstAddr := bytes.Repeat([]byte{1}, 32)
+	_, err := dctRolesF.ProcessBuiltinFunction(nil, acc, &vmcommon.ContractCallInput{
+		VMInput: vmcommon.VMInput{
+			CallValue:  big.NewInt(0),
+			CallerAddr: core.DCTSCAddress,
+			Arguments:  [][]byte{tokenID, []byte(core.DCTRoleNFTCreate), []byte("DCTRoleNFTCreateMultiShard")},
+		},
+		RecipientAddr: dstAddr,
+	})
+
+	require.Nil(t, err)
+	require.True(t, saveNonceCalled)
 }
 
 func TestDctRoles_ProcessBuiltinFunction_SaveFailedShouldErr(t *testing.T) {
