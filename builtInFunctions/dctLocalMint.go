@@ -5,44 +5,45 @@ import (
 	"math/big"
 	"sync"
 
+	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/core/check"
 	"github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/check"
 )
 
 type dctLocalMint struct {
 	baseAlwaysActive
-	keyPrefix    []byte
-	marshalizer  vmcommon.Marshalizer
-	pauseHandler vmcommon.DCTPauseHandler
-	rolesHandler vmcommon.DCTRoleHandler
-	funcGasCost  uint64
-	mutExecution sync.RWMutex
+	keyPrefix             []byte
+	marshalizer           vmcommon.Marshalizer
+	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler
+	rolesHandler          vmcommon.DCTRoleHandler
+	funcGasCost           uint64
+	mutExecution          sync.RWMutex
 }
 
 // NewDCTLocalMintFunc returns the dct local mint built-in function component
 func NewDCTLocalMintFunc(
 	funcGasCost uint64,
 	marshalizer vmcommon.Marshalizer,
-	pauseHandler vmcommon.DCTPauseHandler,
+	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler,
 	rolesHandler vmcommon.DCTRoleHandler,
 ) (*dctLocalMint, error) {
 	if check.IfNil(marshalizer) {
 		return nil, ErrNilMarshalizer
 	}
-	if check.IfNil(pauseHandler) {
-		return nil, ErrNilPauseHandler
+	if check.IfNil(globalSettingsHandler) {
+		return nil, ErrNilGlobalSettingsHandler
 	}
 	if check.IfNil(rolesHandler) {
 		return nil, ErrNilRolesHandler
 	}
 
 	e := &dctLocalMint{
-		keyPrefix:    []byte(vmcommon.NumbatProtectedKeyPrefix + vmcommon.DCTKeyIdentifier),
-		marshalizer:  marshalizer,
-		pauseHandler: pauseHandler,
-		rolesHandler: rolesHandler,
-		funcGasCost:  funcGasCost,
-		mutExecution: sync.RWMutex{},
+		keyPrefix:             []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
+		marshalizer:           marshalizer,
+		globalSettingsHandler: globalSettingsHandler,
+		rolesHandler:          rolesHandler,
+		funcGasCost:           funcGasCost,
+		mutExecution:          sync.RWMutex{},
 	}
 
 	return e, nil
@@ -73,25 +74,25 @@ func (e *dctLocalMint) ProcessBuiltinFunction(
 	}
 
 	tokenID := vmInput.Arguments[0]
-	err = e.rolesHandler.CheckAllowedToExecute(acntSnd, tokenID, []byte(vmcommon.DCTRoleLocalMint))
+	err = e.rolesHandler.CheckAllowedToExecute(acntSnd, tokenID, []byte(core.DCTRoleLocalMint))
 	if err != nil {
 		return nil, err
 	}
 
-	if len(vmInput.Arguments[1]) > vmcommon.MaxLenForDCTIssueMint {
-		return nil, fmt.Errorf("%w max length for dct issue is %d", ErrInvalidArguments, vmcommon.MaxLenForDCTIssueMint)
+	if len(vmInput.Arguments[1]) > core.MaxLenForDCTIssueMint {
+		return nil, fmt.Errorf("%w max length for dct issue is %d", ErrInvalidArguments, core.MaxLenForDCTIssueMint)
 	}
 
 	value := big.NewInt(0).SetBytes(vmInput.Arguments[1])
 	dctTokenKey := append(e.keyPrefix, tokenID...)
-	err = addToDCTBalance(acntSnd, dctTokenKey, big.NewInt(0).Set(value), e.marshalizer, e.pauseHandler, vmInput.ReturnCallAfterError)
+	err = addToDCTBalance(acntSnd, dctTokenKey, big.NewInt(0).Set(value), e.marshalizer, e.globalSettingsHandler, vmInput.ReturnCallAfterError)
 	if err != nil {
 		return nil, err
 	}
 
 	vmOutput := &vmcommon.VMOutput{ReturnCode: vmcommon.Ok, GasRemaining: vmInput.GasProvided - e.funcGasCost}
 
-	addDCTEntryInVMOutput(vmOutput, []byte(vmcommon.BuiltInFunctionDCTLocalMint), vmInput.Arguments[0], value, vmInput.CallerAddr)
+	addDCTEntryInVMOutput(vmOutput, []byte(core.BuiltInFunctionDCTLocalMint), vmInput.Arguments[0], 0, value, vmInput.CallerAddr)
 
 	return vmOutput, nil
 }

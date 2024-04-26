@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"math/big"
 
+	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/core/check"
 	"github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/check"
 )
 
 type dctFreezeWipe struct {
@@ -28,7 +29,7 @@ func NewDCTFreezeWipeFunc(
 
 	e := &dctFreezeWipe{
 		marshalizer: marshalizer,
-		keyPrefix:   []byte(vmcommon.NumbatProtectedKeyPrefix + vmcommon.DCTKeyIdentifier),
+		keyPrefix:   []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
 		freeze:      freeze,
 		wipe:        wipe,
 	}
@@ -54,7 +55,7 @@ func (e *dctFreezeWipe) ProcessBuiltinFunction(
 	if len(vmInput.Arguments) != 1 {
 		return nil, ErrInvalidArguments
 	}
-	if !bytes.Equal(vmInput.CallerAddr, vmcommon.DCTSCAddress) {
+	if !bytes.Equal(vmInput.CallerAddr, core.DCTSCAddress) {
 		return nil, ErrAddressIsNotDCTSystemSC
 	}
 	if check.IfNil(acntDst) {
@@ -77,7 +78,7 @@ func (e *dctFreezeWipe) ProcessBuiltinFunction(
 
 	vmOutput := &vmcommon.VMOutput{ReturnCode: vmcommon.Ok}
 	if e.wipe {
-		addDCTEntryInVMOutput(vmOutput, []byte(vmcommon.BuiltInFunctionDCTWipe), vmInput.Arguments[0], big.NewInt(0), vmInput.CallerAddr, acntDst.AddressBytes())
+		addDCTEntryInVMOutput(vmOutput, []byte(core.BuiltInFunctionDCTWipe), vmInput.Arguments[0], 0, big.NewInt(0), vmInput.CallerAddr, acntDst.AddressBytes())
 	}
 
 	return vmOutput, nil

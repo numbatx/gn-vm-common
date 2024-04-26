@@ -3,12 +3,13 @@ package builtInFunctions
 import (
 	"bytes"
 
+	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/core/check"
+	"github.com/numbatx/gn-core/data/dct"
 	"github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/check"
-	"github.com/numbatx/gn-vm-common/data/dct"
 )
 
-var roleKeyPrefix = []byte(vmcommon.NumbatProtectedKeyPrefix + vmcommon.DCTRoleIdentifier + vmcommon.DCTKeyIdentifier)
+var roleKeyPrefix = []byte(core.NumbatProtectedKeyPrefix + core.DCTRoleIdentifier + core.DCTKeyIdentifier)
 
 type dctRoles struct {
 	baseAlwaysActive
@@ -46,7 +47,7 @@ func (e *dctRoles) ProcessBuiltinFunction(
 	if err != nil {
 		return nil, err
 	}
-	if !bytes.Equal(vmInput.CallerAddr, vmcommon.DCTSCAddress) {
+	if !bytes.Equal(vmInput.CallerAddr, core.DCTSCAddress) {
 		return nil, ErrAddressIsNotDCTSystemSC
 	}
 	if check.IfNil(acntDst) {

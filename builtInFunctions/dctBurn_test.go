@@ -4,8 +4,9 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/data/dct"
 	"github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/data/dct"
 	"github.com/numbatx/gn-vm-common/mock"
 	"github.com/stretchr/testify/assert"
 )
@@ -13,8 +14,8 @@ import (
 func TestDCTBurn_ProcessBuiltInFunctionErrors(t *testing.T) {
 	t.Parallel()
 
-	pauseHandler := &mock.PauseHandlerStub{}
-	burnFunc, _ := NewDCTBurnFunc(10, &mock.MarshalizerMock{}, pauseHandler)
+	globalSettingsHandler := &mock.GlobalSettingsHandlerStub{}
+	burnFunc, _ := NewDCTBurnFunc(10, &mock.MarshalizerMock{}, globalSettingsHandler, 1000, &mock.EpochNotifierStub{})
 	_, err := burnFunc.ProcessBuiltinFunction(nil, nil, nil)
 	assert.Equal(t, err, ErrNilVmInput)
 
@@ -38,7 +39,7 @@ func TestDCTBurn_ProcessBuiltInFunctionErrors(t *testing.T) {
 	_, err = burnFunc.ProcessBuiltinFunction(nil, nil, input)
 	assert.Equal(t, err, ErrAddressIsNotDCTSystemSC)
 
-	input.RecipientAddr = vmcommon.DCTSCAddress
+	input.RecipientAddr = core.DCTSCAddress
 	input.GasProvided = burnFunc.funcGasCost - 1
 	accSnd := mock.NewUserAccount([]byte("dst"))
 	_, err = burnFunc.ProcessBuiltinFunction(accSnd, nil, input)
@@ -47,7 +48,7 @@ func TestDCTBurn_ProcessBuiltInFunctionErrors(t *testing.T) {
 	_, err = burnFunc.ProcessBuiltinFunction(nil, nil, input)
 	assert.Equal(t, err, ErrNilUserAccount)
 
-	pauseHandler.IsPausedCalled = func(token []byte) bool {
+	globalSettingsHandler.IsPausedCalled = func(token []byte) bool {
 		return true
 	}
 	input.GasProvided = burnFunc.funcGasCost
@@ -59,15 +60,15 @@ func TestDCTBurn_ProcessBuiltInFunctionSenderBurns(t *testing.T) {
 	t.Parallel()
 
 	marshalizer := &mock.MarshalizerMock{}
-	pauseHandler := &mock.PauseHandlerStub{}
-	burnFunc, _ := NewDCTBurnFunc(10, marshalizer, pauseHandler)
+	globalSettingsHandler := &mock.GlobalSettingsHandlerStub{}
+	burnFunc, _ := NewDCTBurnFunc(10, marshalizer, globalSettingsHandler, 1000, &mock.EpochNotifierStub{})
 
 	input := &vmcommon.ContractCallInput{
 		VMInput: vmcommon.VMInput{
 			GasProvided: 50,
 			CallValue:   big.NewInt(0),
 		},
-		RecipientAddr: vmcommon.DCTSCAddress,
+		RecipientAddr: core.DCTSCAddress,
 	}
 	key := []byte("key")
 	value := big.NewInt(10).Bytes()
@@ -85,7 +86,7 @@ func TestDCTBurn_ProcessBuiltInFunctionSenderBurns(t *testing.T) {
 	_, err := burnFunc.ProcessBuiltinFunction(accSnd, nil, input)
 	assert.Equal(t, err, ErrDCTIsFrozenForAccount)
 
-	pauseHandler.IsPausedCalled = func(token []byte) bool {
+	globalSettingsHandler.IsPausedCalled = func(token []byte) bool {
 		return true
 	}
 	dctToken = &dct.DCToken{Value: big.NewInt(100), Properties: dctNotFrozen.ToBytes()}
@@ -95,7 +96,7 @@ func TestDCTBurn_ProcessBuiltInFunctionSenderBurns(t *testing.T) {
 	_, err = burnFunc.ProcessBuiltinFunction(accSnd, nil, input)
 	assert.Equal(t, err, ErrDCTTokenIsPaused)
 
-	pauseHandler.IsPausedCalled = func(token []byte) bool {
+	globalSettingsHandler.IsPausedCalled = func(token []byte) bool {
 		return false
 	}
 	_, err = burnFunc.ProcessBuiltinFunction(accSnd, nil, input)

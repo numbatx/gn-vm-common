@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"math/big"
 
+	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/core/check"
+	"github.com/numbatx/gn-core/data/dct"
 	vmcommon "github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/check"
-	"github.com/numbatx/gn-vm-common/data/dct"
 )
 
 // MinArgsForDCTTransfer defines the minimum arguments needed for an dct transfer
@@ -44,11 +45,11 @@ func (e *dctTransferParser) ParseDCTTransfers(
 	args [][]byte,
 ) (*vmcommon.ParsedDCTTransfers, error) {
 	switch function {
-	case vmcommon.BuiltInFunctionDCTTransfer:
+	case core.BuiltInFunctionDCTTransfer:
 		return e.parseSingleDCTTransfer(rcvAddr, args)
-	case vmcommon.BuiltInFunctionDCTNFTTransfer:
+	case core.BuiltInFunctionDCTNFTTransfer:
 		return e.parseSingleDCTNFTTransfer(sndAddr, rcvAddr, args)
-	case vmcommon.BuiltInFunctionMultiDCTNFTTransfer:
+	case core.BuiltInFunctionMultiDCTNFTTransfer:
 		return e.parseMultiDCTNFTTransfer(sndAddr, rcvAddr, args)
 	default:
 		return nil, ErrNotDCTTransferInput
@@ -74,7 +75,7 @@ func (e *dctTransferParser) parseSingleDCTTransfer(rcvAddr []byte, args [][]byte
 	dctTransfers.DCTTransfers[0] = &vmcommon.DCTTransfer{
 		DCTValue:      big.NewInt(0).SetBytes(args[1]),
 		DCTTokenName:  args[0],
-		DCTTokenType:  uint32(vmcommon.Fungible),
+		DCTTokenType:  uint32(core.Fungible),
 		DCTTokenNonce: 0,
 	}
 
@@ -104,7 +105,7 @@ func (e *dctTransferParser) parseSingleDCTNFTTransfer(sndAddr, rcvAddr []byte, a
 	dctTransfers.DCTTransfers[0] = &vmcommon.DCTTransfer{
 		DCTValue:      big.NewInt(0).SetBytes(args[2]),
 		DCTTokenName:  args[0],
-		DCTTokenType:  uint32(vmcommon.NonFungible),
+		DCTTokenType:  uint32(core.NonFungible),
 		DCTTokenNonce: big.NewInt(0).SetBytes(args[1]).Uint64(),
 	}
 
@@ -164,11 +165,11 @@ func (e *dctTransferParser) createNewDCTTransfer(
 	dctTransfer := &vmcommon.DCTTransfer{
 		DCTValue:      big.NewInt(0).SetBytes(args[tokenStartIndex+2]),
 		DCTTokenName:  args[tokenStartIndex],
-		DCTTokenType:  uint32(vmcommon.Fungible),
+		DCTTokenType:  uint32(core.Fungible),
 		DCTTokenNonce: big.NewInt(0).SetBytes(args[tokenStartIndex+1]).Uint64(),
 	}
 	if dctTransfer.DCTTokenNonce > 0 {
-		dctTransfer.DCTTokenType = uint32(vmcommon.NonFungible)
+		dctTransfer.DCTTokenType = uint32(core.NonFungible)
 		if !isTxAtSender {
 			transferDCTData := &dct.DCToken{}
 			err := e.marshalizer.Unmarshal(transferDCTData, args[tokenStartIndex+2])

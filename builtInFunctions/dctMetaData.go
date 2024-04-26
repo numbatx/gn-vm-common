@@ -5,6 +5,8 @@ const lengthOfDCTMetadata = 2
 const (
 	// MetadataPaused is the location of paused flag in the dct global meta data
 	MetadataPaused = 1
+	// MetadataLimitedTransfer is the location of limited transfer flag in the dct global meta data
+	MetadataLimitedTransfer = 2
 )
 
 const (
@@ -14,7 +16,8 @@ const (
 
 // DCTGlobalMetadata represents dct global metadata saved on system account
 type DCTGlobalMetadata struct {
-	Paused bool
+	Paused          bool
+	LimitedTransfer bool
 }
 
 // DCTGlobalMetadataFromBytes creates a metadata object from bytes
@@ -24,7 +27,8 @@ func DCTGlobalMetadataFromBytes(bytes []byte) DCTGlobalMetadata {
 	}
 
 	return DCTGlobalMetadata{
-		Paused: (bytes[0] & MetadataPaused) != 0,
+		Paused:          (bytes[0] & MetadataPaused) != 0,
+		LimitedTransfer: (bytes[0] & MetadataLimitedTransfer) != 0,
 	}
 }
 
@@ -34,6 +38,9 @@ func (metadata *DCTGlobalMetadata) ToBytes() []byte {
 
 	if metadata.Paused {
 		bytes[0] |= MetadataPaused
+	}
+	if metadata.LimitedTransfer {
+		bytes[0] |= MetadataLimitedTransfer
 	}
 
 	return bytes

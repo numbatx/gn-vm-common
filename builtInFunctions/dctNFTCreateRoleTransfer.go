@@ -5,9 +5,10 @@ import (
 	"encoding/hex"
 	"math/big"
 
+	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/core/check"
+	"github.com/numbatx/gn-core/data/dct"
 	"github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/check"
-	"github.com/numbatx/gn-vm-common/data/dct"
 )
 
 type dctNFTCreateRoleTransfer struct {
@@ -35,7 +36,7 @@ func NewDCTNFTCreateRoleTransfer(
 	}
 
 	e := &dctNFTCreateRoleTransfer{
-		keyPrefix:        []byte(vmcommon.NumbatProtectedKeyPrefix + vmcommon.DCTKeyIdentifier),
+		keyPrefix:        []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
 		marshalizer:      marshalizer,
 		accounts:         accounts,
 		shardCoordinator: shardCoordinator,
@@ -66,7 +67,7 @@ func (e *dctNFTCreateRoleTransfer) ProcessBuiltinFunction(
 	}
 
 	vmOutput := &vmcommon.VMOutput{ReturnCode: vmcommon.Ok}
-	if bytes.Equal(vmInput.CallerAddr, vmcommon.DCTSCAddress) {
+	if bytes.Equal(vmInput.CallerAddr, core.DCTSCAddress) {
 		outAcc, errExec := e.executeTransferNFTCreateChangeAtCurrentOwner(acntDst, vmInput)
 		if errExec != nil {
 			return nil, errExec
@@ -146,7 +147,7 @@ func (e *dctNFTCreateRoleTransfer) executeTransferNFTCreateChangeAtCurrentOwner(
 	}
 	outTransfer := vmcommon.OutputTransfer{
 		Value: big.NewInt(0),
-		Data: []byte(vmcommon.BuiltInFunctionDCTNFTCreateRoleTransfer + "@" +
+		Data: []byte(core.BuiltInFunctionDCTNFTCreateRoleTransfer + "@" +
 			hex.EncodeToString(tokenID) + "@" + hex.EncodeToString(big.NewInt(0).SetUint64(nonce).Bytes())),
 		SenderAddress: vmInput.CallerAddr,
 	}
@@ -164,7 +165,7 @@ func (e *dctNFTCreateRoleTransfer) deleteCreateRoleFromAccount(
 		return err
 	}
 
-	deleteRoles(roles, [][]byte{[]byte(vmcommon.DCTRoleNFTCreate)})
+	deleteRoles(roles, [][]byte{[]byte(core.DCTRoleNFTCreate)})
 	return saveRolesToAccount(acntDst, dctTokenRoleKey, roles, e.marshalizer)
 }
 
@@ -178,12 +179,12 @@ func (e *dctNFTCreateRoleTransfer) addCreateRoleToAccount(
 	}
 
 	for _, role := range roles.Roles {
-		if bytes.Equal(role, []byte(vmcommon.DCTRoleNFTCreate)) {
+		if bytes.Equal(role, []byte(core.DCTRoleNFTCreate)) {
 			return nil
 		}
 	}
 
-	roles.Roles = append(roles.Roles, []byte(vmcommon.DCTRoleNFTCreate))
+	roles.Roles = append(roles.Roles, []byte(core.DCTRoleNFTCreate))
 	return saveRolesToAccount(acntDst, dctTokenRoleKey, roles, e.marshalizer)
 }
 

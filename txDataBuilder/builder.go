@@ -4,7 +4,7 @@ import (
 	"encoding/hex"
 	"math/big"
 
-	"github.com/numbatx/gn-vm-common"
+	"github.com/numbatx/gn-core/core"
 )
 
 // txDataBuilder constructs a string to be used for transaction arguments
@@ -144,17 +144,17 @@ func (builder *txDataBuilder) IssueDCT(token string, ticker string, supply int64
 
 // TransferDCT appends to the data string all the elements required to request an DCT transfer.
 func (builder *txDataBuilder) TransferDCT(token string, value int64) *txDataBuilder {
-	return builder.Func(vmcommon.BuiltInFunctionDCTTransfer).Str(token).Int64(value)
+	return builder.Func(core.BuiltInFunctionDCTTransfer).Str(token).Int64(value)
 }
 
 //TransferDCTNFT appends to the data string all the elements required to request an DCT NFT transfer.
 func (builder *txDataBuilder) TransferDCTNFT(token string, nonce int, value int64) *txDataBuilder {
-	return builder.Func(vmcommon.BuiltInFunctionDCTNFTTransfer).Str(token).Int(nonce).Int64(value)
+	return builder.Func(core.BuiltInFunctionDCTNFTTransfer).Str(token).Int(nonce).Int64(value)
 }
 
 // BurnDCT appends to the data string all the elements required to burn DCT tokens.
 func (builder *txDataBuilder) BurnDCT(token string, value int64) *txDataBuilder {
-	return builder.Func(vmcommon.BuiltInFunctionDCTBurn).Str(token).Int64(value)
+	return builder.Func(core.BuiltInFunctionDCTBurn).Str(token).Int64(value)
 }
 
 // CanFreeze appends "canFreeze" followed by the provided boolean value.

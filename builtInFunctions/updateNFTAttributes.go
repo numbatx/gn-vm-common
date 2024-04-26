@@ -4,20 +4,21 @@ import (
 	"math/big"
 	"sync"
 
+	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/core/check"
 	"github.com/numbatx/gn-vm-common"
 	"github.com/numbatx/gn-vm-common/atomic"
-	"github.com/numbatx/gn-vm-common/check"
 )
 
 type dctNFTupdate struct {
 	*baseEnabled
-	keyPrefix    []byte
-	marshalizer  vmcommon.Marshalizer
-	pauseHandler vmcommon.DCTPauseHandler
-	rolesHandler vmcommon.DCTRoleHandler
-	gasConfig    vmcommon.BaseOperationCost
-	funcGasCost  uint64
-	mutExecution sync.RWMutex
+	keyPrefix             []byte
+	marshalizer           vmcommon.Marshalizer
+	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler
+	rolesHandler          vmcommon.DCTRoleHandler
+	gasConfig             vmcommon.BaseOperationCost
+	funcGasCost           uint64
+	mutExecution          sync.RWMutex
 }
 
 // NewDCTNFTAddUriFunc returns the dct NFT update attribute built-in function component
@@ -25,7 +26,7 @@ func NewDCTNFTUpdateAttributesFunc(
 	funcGasCost uint64,
 	gasConfig vmcommon.BaseOperationCost,
 	marshalizer vmcommon.Marshalizer,
-	pauseHandler vmcommon.DCTPauseHandler,
+	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler,
 	rolesHandler vmcommon.DCTRoleHandler,
 	activationEpoch uint32,
 	epochNotifier vmcommon.EpochNotifier,
@@ -33,8 +34,8 @@ func NewDCTNFTUpdateAttributesFunc(
 	if check.IfNil(marshalizer) {
 		return nil, ErrNilMarshalizer
 	}
-	if check.IfNil(pauseHandler) {
-		return nil, ErrNilPauseHandler
+	if check.IfNil(globalSettingsHandler) {
+		return nil, ErrNilGlobalSettingsHandler
 	}
 	if check.IfNil(rolesHandler) {
 		return nil, ErrNilRolesHandler
@@ -44,17 +45,17 @@ func NewDCTNFTUpdateAttributesFunc(
 	}
 
 	e := &dctNFTupdate{
-		keyPrefix:    []byte(vmcommon.NumbatProtectedKeyPrefix + vmcommon.DCTKeyIdentifier),
-		marshalizer:  marshalizer,
-		funcGasCost:  funcGasCost,
-		mutExecution: sync.RWMutex{},
-		pauseHandler: pauseHandler,
-		gasConfig:    gasConfig,
-		rolesHandler: rolesHandler,
+		keyPrefix:             []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
+		marshalizer:           marshalizer,
+		funcGasCost:           funcGasCost,
+		mutExecution:          sync.RWMutex{},
+		globalSettingsHandler: globalSettingsHandler,
+		gasConfig:             gasConfig,
+		rolesHandler:          rolesHandler,
 	}
 
 	e.baseEnabled = &baseEnabled{
-		function:        vmcommon.BuiltInFunctionDCTNFTUpdateAttributes,
+		function:        core.BuiltInFunctionDCTNFTUpdateAttributes,
 		activationEpoch: activationEpoch,
 		flagActivated:   atomic.Flag{},
 	}
@@ -96,7 +97,7 @@ func (e *dctNFTupdate) ProcessBuiltinFunction(
 		return nil, ErrInvalidArguments
 	}
 
-	err = e.rolesHandler.CheckAllowedToExecute(acntSnd, vmInput.Arguments[0], []byte(vmcommon.DCTRoleNFTUpdateAttributes))
+	err = e.rolesHandler.CheckAllowedToExecute(acntSnd, vmInput.Arguments[0], []byte(core.DCTRoleNFTUpdateAttributes))
 	if err != nil {
 		return nil, err
 	}
@@ -118,17 +119,18 @@ func (e *dctNFTupdate) ProcessBuiltinFunction(
 
 	dctData.TokenMetaData.Attributes = vmInput.Arguments[2]
 
-	_, err = saveDCTNFTToken(acntSnd, dctTokenKey, dctData, e.marshalizer, e.pauseHandler, vmInput.ReturnCallAfterError)
+	_, err = saveDCTNFTToken(acntSnd, dctTokenKey, dctData, e.marshalizer, e.globalSettingsHandler, vmInput.ReturnCallAfterError)
 	if err != nil {
 		return nil, err
 	}
 
-	logEntry := newEntryForNFT(vmcommon.BuiltInFunctionDCTNFTUpdateAttributes, vmInput.CallerAddr, vmInput.Arguments[0], nonce)
 	vmOutput := &vmcommon.VMOutput{
 		ReturnCode:   vmcommon.Ok,
 		GasRemaining: vmInput.GasProvided - e.funcGasCost - gasCostForStore,
-		Logs:         []*vmcommon.LogEntry{logEntry},
 	}
+
+	addDCTEntryInVMOutput(vmOutput, []byte(core.BuiltInFunctionDCTNFTUpdateAttributes), vmInput.Arguments[0], nonce, big.NewInt(0), vmInput.CallerAddr)
+
 	return vmOutput, nil
 }
 

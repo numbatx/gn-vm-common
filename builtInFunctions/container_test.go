@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/numbatx/gn-vm-common/check"
+	"github.com/numbatx/gn-core/core/check"
 	"github.com/numbatx/gn-vm-common/mock"
 	"github.com/stretchr/testify/assert"
 )

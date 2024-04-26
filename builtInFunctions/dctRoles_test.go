@@ -5,8 +5,9 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/data/dct"
 	"github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/data/dct"
 	"github.com/numbatx/gn-vm-common/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -52,7 +53,7 @@ func TestDctRoles_ProcessBuiltinFunction_NilAccountDestShouldErr(t *testing.T) {
 	_, err := dctRolesF.ProcessBuiltinFunction(nil, nil, &vmcommon.ContractCallInput{
 		VMInput: vmcommon.VMInput{
 			CallValue:  big.NewInt(0),
-			CallerAddr: vmcommon.DCTSCAddress,
+			CallerAddr: core.DCTSCAddress,
 			Arguments:  [][]byte{[]byte("1"), []byte("2")},
 		},
 	})
@@ -75,7 +76,7 @@ func TestDctRoles_ProcessBuiltinFunction_GetRolesFailShouldErr(t *testing.T) {
 	}, &vmcommon.ContractCallInput{
 		VMInput: vmcommon.VMInput{
 			CallValue:  big.NewInt(0),
-			CallerAddr: vmcommon.DCTSCAddress,
+			CallerAddr: core.DCTSCAddress,
 			Arguments:  [][]byte{[]byte("1"), []byte("2")},
 		},
 	})
@@ -103,7 +104,7 @@ func TestDctRoles_ProcessBuiltinFunction_GetRolesFailShouldWorkEvenIfAccntTrieIs
 	}, &vmcommon.ContractCallInput{
 		VMInput: vmcommon.VMInput{
 			CallValue:  big.NewInt(0),
-			CallerAddr: vmcommon.DCTSCAddress,
+			CallerAddr: core.DCTSCAddress,
 			Arguments:  [][]byte{[]byte("1"), []byte("2")},
 		},
 	})
@@ -127,7 +128,7 @@ func TestDctRoles_ProcessBuiltinFunction_SetRolesShouldWork(t *testing.T) {
 				SaveKeyValueCalled: func(key []byte, value []byte) error {
 					roles := &dct.DCTRoles{}
 					_ = marshalizer.Unmarshal(roles, value)
-					require.Equal(t, roles.Roles, [][]byte{[]byte(vmcommon.DCTRoleLocalMint)})
+					require.Equal(t, roles.Roles, [][]byte{[]byte(core.DCTRoleLocalMint)})
 					return nil
 				},
 			}
@@ -136,8 +137,8 @@ func TestDctRoles_ProcessBuiltinFunction_SetRolesShouldWork(t *testing.T) {
 	_, err := dctRolesF.ProcessBuiltinFunction(nil, acc, &vmcommon.ContractCallInput{
 		VMInput: vmcommon.VMInput{
 			CallValue:  big.NewInt(0),
-			CallerAddr: vmcommon.DCTSCAddress,
-			Arguments:  [][]byte{[]byte("1"), []byte(vmcommon.DCTRoleLocalMint)},
+			CallerAddr: core.DCTSCAddress,
+			Arguments:  [][]byte{[]byte("1"), []byte(core.DCTRoleLocalMint)},
 		},
 	})
 	require.Nil(t, err)
@@ -166,8 +167,8 @@ func TestDctRoles_ProcessBuiltinFunction_SaveFailedShouldErr(t *testing.T) {
 	_, err := dctRolesF.ProcessBuiltinFunction(nil, acc, &vmcommon.ContractCallInput{
 		VMInput: vmcommon.VMInput{
 			CallValue:  big.NewInt(0),
-			CallerAddr: vmcommon.DCTSCAddress,
-			Arguments:  [][]byte{[]byte("1"), []byte(vmcommon.DCTRoleLocalMint)},
+			CallerAddr: core.DCTSCAddress,
+			Arguments:  [][]byte{[]byte("1"), []byte(core.DCTRoleLocalMint)},
 		},
 	})
 	require.Equal(t, localErr, err)
@@ -198,8 +199,8 @@ func TestDctRoles_ProcessBuiltinFunction_UnsetRolesDoesNotExistsShouldWork(t *te
 	_, err := dctRolesF.ProcessBuiltinFunction(nil, acc, &vmcommon.ContractCallInput{
 		VMInput: vmcommon.VMInput{
 			CallValue:  big.NewInt(0),
-			CallerAddr: vmcommon.DCTSCAddress,
-			Arguments:  [][]byte{[]byte("1"), []byte(vmcommon.DCTRoleLocalMint)},
+			CallerAddr: core.DCTSCAddress,
+			Arguments:  [][]byte{[]byte("1"), []byte(core.DCTRoleLocalMint)},
 		},
 	})
 	require.Nil(t, err)
@@ -216,7 +217,7 @@ func TestDctRoles_ProcessBuiltinFunction_UnsetRolesShouldWork(t *testing.T) {
 			return &mock.DataTrieTrackerStub{
 				RetrieveValueCalled: func(key []byte) ([]byte, error) {
 					roles := &dct.DCTRoles{
-						Roles: [][]byte{[]byte(vmcommon.DCTRoleLocalMint)},
+						Roles: [][]byte{[]byte(core.DCTRoleLocalMint)},
 					}
 					return marshalizer.Marshal(roles)
 				},
@@ -232,8 +233,8 @@ func TestDctRoles_ProcessBuiltinFunction_UnsetRolesShouldWork(t *testing.T) {
 	_, err := dctRolesF.ProcessBuiltinFunction(nil, acc, &vmcommon.ContractCallInput{
 		VMInput: vmcommon.VMInput{
 			CallValue:  big.NewInt(0),
-			CallerAddr: vmcommon.DCTSCAddress,
-			Arguments:  [][]byte{[]byte("1"), []byte(vmcommon.DCTRoleLocalMint)},
+			CallerAddr: core.DCTSCAddress,
+			Arguments:  [][]byte{[]byte("1"), []byte(core.DCTRoleLocalMint)},
 		},
 	})
 	require.Nil(t, err)
@@ -245,7 +246,7 @@ func TestDctRoles_CheckAllowedToExecuteNilAccountShouldErr(t *testing.T) {
 	marshalizer := &mock.MarshalizerMock{}
 	dctRolesF, _ := NewDCTRolesFunc(marshalizer, false)
 
-	err := dctRolesF.CheckAllowedToExecute(nil, []byte("ID"), []byte(vmcommon.DCTRoleLocalBurn))
+	err := dctRolesF.CheckAllowedToExecute(nil, []byte("ID"), []byte(core.DCTRoleLocalBurn))
 	require.Equal(t, ErrNilUserAccount, err)
 }
 
@@ -263,7 +264,7 @@ func TestDctRoles_CheckAllowedToExecuteCannotGetDCTRole(t *testing.T) {
 				},
 			}
 		},
-	}, []byte("ID"), []byte(vmcommon.DCTRoleLocalBurn))
+	}, []byte("ID"), []byte(core.DCTRoleLocalBurn))
 	require.Error(t, err)
 }
 
@@ -281,7 +282,7 @@ func TestDctRoles_CheckAllowedToExecuteIsNewNotAllowed(t *testing.T) {
 				},
 			}
 		},
-	}, []byte("ID"), []byte(vmcommon.DCTRoleLocalBurn))
+	}, []byte("ID"), []byte(core.DCTRoleLocalBurn))
 	require.Equal(t, ErrActionNotAllowed, err)
 }
 
@@ -296,13 +297,13 @@ func TestDctRoles_CheckAllowed_ShouldWork(t *testing.T) {
 			return &mock.DataTrieTrackerStub{
 				RetrieveValueCalled: func(key []byte) ([]byte, error) {
 					roles := &dct.DCTRoles{
-						Roles: [][]byte{[]byte(vmcommon.DCTRoleLocalMint)},
+						Roles: [][]byte{[]byte(core.DCTRoleLocalMint)},
 					}
 					return marshalizer.Marshal(roles)
 				},
 			}
 		},
-	}, []byte("ID"), []byte(vmcommon.DCTRoleLocalMint))
+	}, []byte("ID"), []byte(core.DCTRoleLocalMint))
 	require.Nil(t, err)
 }
 
@@ -317,12 +318,12 @@ func TestDctRoles_CheckAllowedToExecuteRoleNotFind(t *testing.T) {
 			return &mock.DataTrieTrackerStub{
 				RetrieveValueCalled: func(key []byte) ([]byte, error) {
 					roles := &dct.DCTRoles{
-						Roles: [][]byte{[]byte(vmcommon.DCTRoleLocalBurn)},
+						Roles: [][]byte{[]byte(core.DCTRoleLocalBurn)},
 					}
 					return marshalizer.Marshal(roles)
 				},
 			}
 		},
-	}, []byte("ID"), []byte(vmcommon.DCTRoleLocalMint))
+	}, []byte("ID"), []byte(core.DCTRoleLocalMint))
 	require.Equal(t, ErrActionNotAllowed, err)
 }

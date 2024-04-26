@@ -6,8 +6,8 @@ import (
 	"math/big"
 	"sync"
 
+	"github.com/numbatx/gn-core/core/check"
 	"github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/check"
 )
 
 type saveKeyValueStorage struct {
@@ -44,13 +44,13 @@ func (k *saveKeyValueStorage) SetNewGasConfig(gasCost *vmcommon.GasCost) {
 
 // ProcessBuiltinFunction will save the value for the selected key
 func (k *saveKeyValueStorage) ProcessBuiltinFunction(
-	acntSnd, _ vmcommon.UserAccountHandler,
+	_, acntDest vmcommon.UserAccountHandler,
 	input *vmcommon.ContractCallInput,
 ) (*vmcommon.VMOutput, error) {
 	k.mutExecution.RLock()
 	defer k.mutExecution.RUnlock()
 
-	err := checkArgumentsForSaveKeyValue(acntSnd, input)
+	err := checkArgumentsForSaveKeyValue(acntDest, input)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +71,7 @@ func (k *saveKeyValueStorage) ProcessBuiltinFunction(
 			return nil, fmt.Errorf("%w it is not allowed to save under key %s", ErrOperationNotPermitted, key)
 		}
 
-		oldValue, _ := acntSnd.AccountDataHandler().RetrieveValue(key)
+		oldValue, _ := acntDest.AccountDataHandler().RetrieveValue(key)
 		if bytes.Equal(oldValue, value) {
 			continue
 		}
@@ -88,7 +88,9 @@ func (k *saveKeyValueStorage) ProcessBuiltinFunction(
 			return nil, ErrNotEnoughGas
 		}
 
-		err = acntSnd.AccountDataHandler().SaveKeyValue(key, value)
+		//key-value test point
+
+		err = acntDest.AccountDataHandler().SaveKeyValue(key, value)
 		if err != nil {
 			return nil, err
 		}

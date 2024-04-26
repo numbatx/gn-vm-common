@@ -5,9 +5,10 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/core/check"
+	"github.com/numbatx/gn-core/data/dct"
 	"github.com/numbatx/gn-vm-common"
-	"github.com/numbatx/gn-vm-common/check"
-	"github.com/numbatx/gn-vm-common/data/dct"
 	"github.com/numbatx/gn-vm-common/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -23,20 +24,20 @@ func TestNewDCTNFTAddUriFunc(t *testing.T) {
 	// nil pause handler
 	e, err = NewDCTNFTAddUriFunc(10, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, nil, nil, 0, &mock.EpochNotifierStub{})
 	require.True(t, check.IfNil(e))
-	require.Equal(t, ErrNilPauseHandler, err)
+	require.Equal(t, ErrNilGlobalSettingsHandler, err)
 
 	// nil roles handler
-	e, err = NewDCTNFTAddUriFunc(10, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, &mock.PauseHandlerStub{}, nil, 0, &mock.EpochNotifierStub{})
+	e, err = NewDCTNFTAddUriFunc(10, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, nil, 0, &mock.EpochNotifierStub{})
 	require.True(t, check.IfNil(e))
 	require.Equal(t, ErrNilRolesHandler, err)
 
 	// nil epoch notifier
-	e, err = NewDCTNFTAddUriFunc(10, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, &mock.PauseHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, nil)
+	e, err = NewDCTNFTAddUriFunc(10, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, nil)
 	require.True(t, check.IfNil(e))
 	require.Equal(t, ErrNilEpochHandler, err)
 
 	// should work
-	e, err = NewDCTNFTAddUriFunc(10, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, &mock.PauseHandlerStub{}, &mock.DCTRoleHandlerStub{}, 1, &mock.EpochNotifierStub{})
+	e, err = NewDCTNFTAddUriFunc(10, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{}, 1, &mock.EpochNotifierStub{})
 	require.False(t, check.IfNil(e))
 	require.NoError(t, err)
 	require.False(t, e.IsActive())
@@ -46,7 +47,7 @@ func TestDCTNFTAddUri_SetNewGasConfig_NilGasCost(t *testing.T) {
 	t.Parallel()
 
 	defaultGasCost := uint64(10)
-	e, _ := NewDCTNFTAddUriFunc(defaultGasCost, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, &mock.PauseHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
+	e, _ := NewDCTNFTAddUriFunc(defaultGasCost, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
 
 	e.SetNewGasConfig(nil)
 	require.Equal(t, defaultGasCost, e.funcGasCost)
@@ -57,7 +58,7 @@ func TestDCTNFTAddUri_SetNewGasConfig_ShouldWork(t *testing.T) {
 
 	defaultGasCost := uint64(10)
 	newGasCost := uint64(37)
-	e, _ := NewDCTNFTAddUriFunc(defaultGasCost, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, &mock.PauseHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
+	e, _ := NewDCTNFTAddUriFunc(defaultGasCost, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
 
 	e.SetNewGasConfig(
 		&vmcommon.GasCost{
@@ -73,7 +74,7 @@ func TestDCTNFTAddUri_SetNewGasConfig_ShouldWork(t *testing.T) {
 func TestDCTNFTAddUri_ProcessBuiltinFunctionErrorOnCheckInput(t *testing.T) {
 	t.Parallel()
 
-	e, _ := NewDCTNFTAddUriFunc(10, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, &mock.PauseHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
+	e, _ := NewDCTNFTAddUriFunc(10, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
 
 	// nil vm input
 	output, err := e.ProcessBuiltinFunction(mock.NewAccountWrapMock([]byte("addr")), nil, nil)
@@ -174,7 +175,7 @@ func TestDCTNFTAddUri_ProcessBuiltinFunctionErrorOnCheckInput(t *testing.T) {
 func TestDCTNFTAddUri_ProcessBuiltinFunctionInvalidNumberOfArguments(t *testing.T) {
 	t.Parallel()
 
-	e, _ := NewDCTNFTAddUriFunc(10, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, &mock.PauseHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
+	e, _ := NewDCTNFTAddUriFunc(10, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
 	output, err := e.ProcessBuiltinFunction(
 		mock.NewAccountWrapMock([]byte("addr")),
 		nil,
@@ -201,7 +202,7 @@ func TestDCTNFTAddUri_ProcessBuiltinFunctionCheckAllowedToExecuteError(t *testin
 			return localErr
 		},
 	}
-	e, _ := NewDCTNFTAddUriFunc(10, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, &mock.PauseHandlerStub{}, rolesHandler, 0, &mock.EpochNotifierStub{})
+	e, _ := NewDCTNFTAddUriFunc(10, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, rolesHandler, 0, &mock.EpochNotifierStub{})
 	output, err := e.ProcessBuiltinFunction(
 		mock.NewAccountWrapMock([]byte("addr")),
 		nil,
@@ -223,7 +224,7 @@ func TestDCTNFTAddUri_ProcessBuiltinFunctionCheckAllowedToExecuteError(t *testin
 func TestDCTNFTAddUri_ProcessBuiltinFunctionNewSenderShouldErr(t *testing.T) {
 	t.Parallel()
 
-	e, _ := NewDCTNFTAddUriFunc(10, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, &mock.PauseHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
+	e, _ := NewDCTNFTAddUriFunc(10, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
 	output, err := e.ProcessBuiltinFunction(
 		mock.NewAccountWrapMock([]byte("addr")),
 		nil,
@@ -247,12 +248,12 @@ func TestDCTNFTAddUri_ProcessBuiltinFunctionMetaDataMissing(t *testing.T) {
 	t.Parallel()
 
 	marshalizer := &mock.MarshalizerMock{}
-	e, _ := NewDCTNFTAddUriFunc(10, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, &mock.PauseHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
+	e, _ := NewDCTNFTAddUriFunc(10, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
 
 	userAcc := mock.NewAccountWrapMock([]byte("addr"))
 	dctData := &dct.DCToken{}
 	dctDataBytes, _ := marshalizer.Marshal(dctData)
-	_ = userAcc.AccountDataHandler().SaveKeyValue([]byte(vmcommon.NumbatProtectedKeyPrefix+vmcommon.DCTKeyIdentifier+"arg0"+"arg1"), dctDataBytes)
+	_ = userAcc.AccountDataHandler().SaveKeyValue([]byte(core.NumbatProtectedKeyPrefix+core.DCTKeyIdentifier+"arg0"+"arg1"), dctDataBytes)
 	output, err := e.ProcessBuiltinFunction(
 		userAcc,
 		nil,
@@ -275,13 +276,13 @@ func TestDCTNFTAddUri_ProcessBuiltinFunctionShouldErrOnSaveBecauseTokenIsPaused(
 	t.Parallel()
 
 	marshalizer := &mock.MarshalizerMock{}
-	pauseHandler := &mock.PauseHandlerStub{
+	globalSettingsHandler := &mock.GlobalSettingsHandlerStub{
 		IsPausedCalled: func(_ []byte) bool {
 			return true
 		},
 	}
 
-	e, _ := NewDCTNFTAddUriFunc(10, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, pauseHandler, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
+	e, _ := NewDCTNFTAddUriFunc(10, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, globalSettingsHandler, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
 
 	userAcc := mock.NewAccountWrapMock([]byte("addr"))
 	dctData := &dct.DCToken{
@@ -291,7 +292,7 @@ func TestDCTNFTAddUri_ProcessBuiltinFunctionShouldErrOnSaveBecauseTokenIsPaused(
 		Value: big.NewInt(10),
 	}
 	dctDataBytes, _ := marshalizer.Marshal(dctData)
-	_ = userAcc.AccountDataHandler().SaveKeyValue([]byte(vmcommon.NumbatProtectedKeyPrefix+vmcommon.DCTKeyIdentifier+"arg0"+"arg1"), dctDataBytes)
+	_ = userAcc.AccountDataHandler().SaveKeyValue([]byte(core.NumbatProtectedKeyPrefix+core.DCTKeyIdentifier+"arg0"+"arg1"), dctDataBytes)
 
 	output, err := e.ProcessBuiltinFunction(
 		userAcc,
@@ -315,14 +316,14 @@ func TestDCTNFTAddUri_ProcessBuiltinFunctionShouldWork(t *testing.T) {
 	t.Parallel()
 
 	tokenIdentifier := "testTkn"
-	key := vmcommon.NumbatProtectedKeyPrefix + vmcommon.DCTKeyIdentifier + tokenIdentifier
+	key := core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier + tokenIdentifier
 
 	nonce := big.NewInt(33)
 	initialValue := big.NewInt(5)
 	URIToAdd := []byte("NewURI")
 
 	marshalizer := &mock.MarshalizerMock{}
-	e, _ := NewDCTNFTAddUriFunc(10, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, &mock.PauseHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
+	e, _ := NewDCTNFTAddUriFunc(10, vmcommon.BaseOperationCost{}, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{}, 0, &mock.EpochNotifierStub{})
 
 	userAcc := mock.NewAccountWrapMock([]byte("addr"))
 	dctData := &dct.DCToken{

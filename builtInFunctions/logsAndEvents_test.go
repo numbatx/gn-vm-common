@@ -4,6 +4,7 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/numbatx/gn-core/core"
 	vmcommon "github.com/numbatx/gn-vm-common"
 	"github.com/stretchr/testify/require"
 )
@@ -11,11 +12,12 @@ import (
 func TestNewEntryForNFT(t *testing.T) {
 	t.Parallel()
 
-	entry := newEntryForNFT(vmcommon.BuiltInFunctionDCTNFTCreate, []byte("caller"), []byte("my-token"), 5)
+	vmOutput := &vmcommon.VMOutput{}
+	addDCTEntryInVMOutput(vmOutput, []byte(core.BuiltInFunctionDCTNFTCreate), []byte("my-token"), 5, big.NewInt(1), []byte("caller"), []byte("receiver"))
 	require.Equal(t, &vmcommon.LogEntry{
-		Identifier: []byte(vmcommon.BuiltInFunctionDCTNFTCreate),
+		Identifier: []byte(core.BuiltInFunctionDCTNFTCreate),
 		Address:    []byte("caller"),
-		Topics:     [][]byte{[]byte("my-token"), big.NewInt(0).SetUint64(5).Bytes()},
+		Topics:     [][]byte{[]byte("my-token"), big.NewInt(0).SetUint64(5).Bytes(), big.NewInt(1).Bytes(), []byte("receiver")},
 		Data:       nil,
-	}, entry)
+	}, vmOutput.Logs[0])
 }
