@@ -140,7 +140,7 @@ func (e *dctNFTMultiTransfer) ProcessBuiltinFunction(
 	if err != nil {
 		return nil, err
 	}
-	if len(vmInput.Arguments) < 5 {
+	if len(vmInput.Arguments) < 4 {
 		return nil, ErrInvalidArguments
 	}
 
@@ -165,9 +165,16 @@ func (e *dctNFTMultiTransfer) ProcessBuiltinFunction(
 		return nil, fmt.Errorf("%w, invalid number of arguments", ErrInvalidArguments)
 	}
 
+	verifyPayable := mustVerifyPayable(vmInput, int(minNumOfArguments))
 	vmOutput := &vmcommon.VMOutput{GasRemaining: vmInput.GasProvided}
 	vmOutput.Logs = make([]*vmcommon.LogEntry, 0, numOfTransfers)
 	startIndex := uint64(1)
+
+	err = e.checkIfPayable(verifyPayable, vmInput.RecipientAddr)
+	if err != nil {
+		return nil, err
+	}
+
 	for i := uint64(0); i < numOfTransfers; i++ {
 		tokenStartIndex := startIndex + i*argumentsPerTransfer
 		tokenID := vmInput.Arguments[tokenStartIndex]
@@ -181,7 +188,7 @@ func (e *dctNFTMultiTransfer) ProcessBuiltinFunction(
 			dctTransferData := &dct.DCToken{}
 			err = e.marshalizer.Unmarshal(dctTransferData, marshaledNFTTransfer)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("%w for token %s", err, string(tokenID))
 			}
 
 			err = e.addNFTToDestination(
@@ -189,17 +196,16 @@ func (e *dctNFTMultiTransfer) ProcessBuiltinFunction(
 				acntDst,
 				dctTransferData,
 				dctTokenKey,
-				mustVerifyPayable(vmInput, int(minNumOfArguments)),
 				vmInput.ReturnCallAfterError)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("%w for token %s", err, string(tokenID))
 			}
 			value = dctTransferData.Value
 		} else {
 			transferredValue := big.NewInt(0).SetBytes(vmInput.Arguments[tokenStartIndex+2])
 			err = addToDCTBalance(acntDst, dctTokenKey, transferredValue, e.marshalizer, e.globalSettingsHandler, vmInput.ReturnCallAfterError)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("%w for token %s", err, string(tokenID))
 			}
 			value = transferredValue
 		}
@@ -262,6 +268,13 @@ func (e *dctNFTMultiTransfer) processDCTNFTMultiTransferOnSenderShard(
 		return nil, err
 	}
 
+	if !check.IfNil(acntDst) {
+		err = e.checkIfPayable(verifyPayable, dstAddress)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	vmOutput := &vmcommon.VMOutput{
 		ReturnCode:   vmcommon.Ok,
 		GasRemaining: vmInput.GasProvided - multiTransferCost,
@@ -283,10 +296,9 @@ func (e *dctNFTMultiTransfer) processDCTNFTMultiTransferOnSenderShard(
 			listTokenID[i],
 			nonce,
 			quantityToTransfer,
-			verifyPayable,
 			vmInput.ReturnCallAfterError)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w for token %s", err, string(listTokenID[i]))
 		}
 
 		addDCTEntryInVMOutput(vmOutput, []byte(core.BuiltInFunctionMultiDCTNFTTransfer), listTokenID[i], nonce, quantityToTransfer, vmInput.CallerAddr, dstAddress)
@@ -314,7 +326,6 @@ func (e *dctNFTMultiTransfer) transferOneTokenOnSenderShard(
 	tokenID []byte,
 	nonce uint64,
 	quantityToTransfer *big.Int,
-	verifyPayable bool,
 	isReturnCallWithError bool,
 ) (*dct.DCToken, error) {
 	if quantityToTransfer.Cmp(zero) <= 0 {
@@ -328,7 +339,7 @@ func (e *dctNFTMultiTransfer) transferOneTokenOnSenderShard(
 	}
 
 	if dctData.Value.Cmp(quantityToTransfer) < 0 {
-		return nil, ErrInvalidNFTQuantity
+		return nil, computeInsufficientQuantityDCTError(tokenID, nonce)
 	}
 	dctData.Value.Sub(dctData.Value, quantityToTransfer)
 
@@ -345,13 +356,26 @@ func (e *dctNFTMultiTransfer) transferOneTokenOnSenderShard(
 	}
 
 	if !check.IfNil(acntDst) {
-		err = e.addNFTToDestination(dstAddress, acntDst, dctData, dctTokenKey, verifyPayable, isReturnCallWithError)
+		if nonce > 0 {
+			err = e.addNFTToDestination(dstAddress, acntDst, dctData, dctTokenKey, isReturnCallWithError)
+		} else {
+			err = addToDCTBalance(acntDst, dctTokenKey, dctData.Value, e.marshalizer, e.globalSettingsHandler, isReturnCallWithError)
+		}
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	return dctData, nil
+}
+
+func computeInsufficientQuantityDCTError(tokenID []byte, nonce uint64) error {
+	err := fmt.Errorf("%w for token: %s", ErrInsufficientQuantityDCT, string(tokenID))
+	if nonce > 0 {
+		err = fmt.Errorf("%w nonce %d", err, nonce)
+	}
+
+	return err
 }
 
 func (e *dctNFTMultiTransfer) loadAccountIfInShard(dstAddress []byte) (vmcommon.UserAccountHandler, error) {
@@ -409,7 +433,7 @@ func (e *dctNFTMultiTransfer) createDCTNFTOutputTransfers(
 		multiTransferCallArgs = append(multiTransferCallArgs, vmInput.Arguments[minNumOfArguments:]...)
 	}
 
-	isSCCallAfter := uint64(len(vmInput.Arguments)) > minNumOfArguments && vmcommon.IsSmartContractAddress(dstAddress)
+	isSCCallAfter := determineIsSCCallAfter(vmInput, dstAddress, int(minNumOfArguments))
 
 	if e.shardCoordinator.SelfId() != e.shardCoordinator.ComputeId(dstAddress) {
 		gasToTransfer := uint64(0)
@@ -450,24 +474,32 @@ func (e *dctNFTMultiTransfer) createDCTNFTOutputTransfers(
 	return nil
 }
 
+func (e *dctNFTMultiTransfer) checkIfPayable(
+	mustVerifyPayable bool,
+	dstAddress []byte,
+) error {
+	if !mustVerifyPayable {
+		return nil
+	}
+
+	isPayable, errIsPayable := e.payableHandler.IsPayable(dstAddress)
+	if errIsPayable != nil {
+		return errIsPayable
+	}
+	if !isPayable {
+		return ErrAccountNotPayable
+	}
+
+	return nil
+}
+
 func (e *dctNFTMultiTransfer) addNFTToDestination(
 	dstAddress []byte,
 	userAccount vmcommon.UserAccountHandler,
 	dctDataToTransfer *dct.DCToken,
 	dctTokenKey []byte,
-	mustVerifyPayable bool,
 	isReturnCallWithError bool,
 ) error {
-	if mustVerifyPayable {
-		isPayable, errIsPayable := e.payableHandler.IsPayable(dstAddress)
-		if errIsPayable != nil {
-			return errIsPayable
-		}
-		if !isPayable {
-			return ErrAccountNotPayable
-		}
-	}
-
 	nonce := uint64(0)
 	if dctDataToTransfer.TokenMetaData != nil {
 		nonce = dctDataToTransfer.TokenMetaData.Nonce
