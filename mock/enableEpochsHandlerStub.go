@@ -29,6 +29,7 @@ type EnableEpochsHandlerStub struct {
 	IsTransferToMetaFlagEnabledField                     bool
 	IsDCTNFTImprovementV1FlagEnabledField               bool
 	IsFixOldTokenLiquidityEnabledField                   bool
+	IsRuntimeMemStoreLimitEnabledField                   bool
 	MultiDCTTransferAsyncCallBackEnableEpochField       uint32
 	FixOOGReturnCodeEnableEpochField                     uint32
 	RemoveNonUpdatedStorageEnableEpochField              uint32
@@ -171,6 +172,11 @@ func (stub *EnableEpochsHandlerStub) IsTransferToMetaFlagEnabled() bool {
 // IsDCTNFTImprovementV1FlagEnabled -
 func (stub *EnableEpochsHandlerStub) IsDCTNFTImprovementV1FlagEnabled() bool {
 	return stub.IsDCTNFTImprovementV1FlagEnabledField
+}
+
+// IsRuntimeMemStoreLimitEnabled -
+func (stub *EnableEpochsHandlerStub) IsRuntimeMemStoreLimitEnabled() bool {
+	return stub.IsRuntimeMemStoreLimitEnabledField
 }
 
 // MultiDCTTransferAsyncCallBackEnableEpoch -

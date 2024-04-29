@@ -1,8 +1,6 @@
 package parsers
 
-import (
-	"strings"
-)
+import "strings"
 
 type callArgsParser struct {
 }
@@ -54,8 +52,8 @@ func (parser *callArgsParser) ParseArguments(data string) ([][]byte, error) {
 func (parser *callArgsParser) parseFunction(tokens []string) (string, error) {
 	if len(tokens) < minNumCallArguments {
 		return "", ErrNilFunction
-
 	}
+
 	function := tokens[indexOfFunction]
 	return function, nil
 }

@@ -6,7 +6,6 @@ import (
 )
 
 func (odp *operationDataFieldParser) parseMultiDCTNFTTransfer(args [][]byte, function string, sender, receiver []byte, numOfShards uint32) *ResponseParseData {
-	
 	responseParse, parsedDCTTransfers, ok := odp.extractDCTData(args, function, sender, receiver)
 	if !ok {
 		return responseParse
