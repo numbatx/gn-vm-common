@@ -18,10 +18,10 @@ const (
 	operationDeploy   = `scDeploy`
 
 	minArgumentsQuantityOperationDCT = 2
-	minArgumentsQuantityOperationNFT = 3
-	numArgsRelayedV2                 = 4
-	receiverAddressIndexRelayedV2    = 0
-	dataFieldIndexRelayedV2          = 2
+	minArgumentsQuantityOperationNFT  = 3
+	numArgsRelayedV2                  = 4
+	receiverAddressIndexRelayedV2     = 0
+	dataFieldIndexRelayedV2           = 2
 
 	argsTokenPosition                   = 0
 	argsNoncePosition                   = 1
@@ -34,8 +34,8 @@ var errInvalidAddressLength = errors.New("invalid address length")
 type operationDataFieldParser struct {
 	builtInFunctionsList []string
 
-	addressLength     int
-	argsParser        vmcommon.CallArgsParser
+	addressLength      int
+	argsParser         vmcommon.CallArgsParser
 	dctTransferParser vmcommon.DCTTransferParser
 }
 
@@ -56,7 +56,7 @@ func NewOperationDataFieldParser(args *ArgsOperationDataFieldParser) (*operation
 
 	return &operationDataFieldParser{
 		argsParser:           argsParser,
-		dctTransferParser:    dctTransferParser,
+		dctTransferParser:   dctTransferParser,
 		addressLength:        args.AddressLength,
 		builtInFunctionsList: getAllBuiltInFunctions(),
 	}, nil
@@ -68,16 +68,16 @@ func (odp *operationDataFieldParser) Parse(dataField []byte, sender, receiver []
 }
 
 func (odp *operationDataFieldParser) parse(dataField []byte, sender, receiver []byte, ignoreRelayed bool, numOfShards uint32) *ResponseParseData {
-
-
 	responseParse := &ResponseParseData{
 		Operation: operationTransfer,
 	}
+
 	isSCDeploy := len(dataField) > 0 && isEmptyAddr(odp.addressLength, receiver)
 	if isSCDeploy {
 		responseParse.Operation = operationDeploy
 		return responseParse
 	}
+
 	function, args, err := odp.argsParser.ParseData(string(dataField))
 	if err != nil {
 		return responseParse
@@ -146,7 +146,7 @@ func (odp *operationDataFieldParser) parseRelayed(function string, args [][]byte
 	return &ResponseParseData{
 		Operation:        res.Operation,
 		Function:         res.Function,
-		DCTValues:        res.DCTValues,
+		DCTValues:       res.DCTValues,
 		Tokens:           res.Tokens,
 		Receivers:        receivers,
 		ReceiversShardID: receiversShardID,

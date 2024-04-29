@@ -1,7 +1,6 @@
 package datafield
 
 import (
-
 	"github.com/numbatx/gn-core/core"
 	vmcommon "github.com/numbatx/gn-vm-common"
 )
@@ -33,7 +32,6 @@ func (odp *operationDataFieldParser) extractDCTData(args [][]byte, function stri
 	}
 
 	parsedDCTTransfers, err := odp.dctTransferParser.ParseDCTTransfers(sender, receiver, function, args)
-
 	if err != nil {
 		return responseParse, nil, false
 	}

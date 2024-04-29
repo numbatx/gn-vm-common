@@ -35,6 +35,7 @@ func TestExtractTokenIdentifierAndNonceDCTWipe(t *testing.T) {
 
 	hexArg = "57524557412d376662623930"
 	args, _ = hex.DecodeString(hexArg)
+	
 
 	identifier, nonce = extractTokenIdentifierAndNonceDCTWipe(args)
 	require.Equal(t, uint64(0), nonce)
