@@ -7,44 +7,44 @@ import (
 	"sync"
 
 	"github.com/numbatx/gn-core/core"
-	"github.com/numbatx/gn-core/core/atomic"
 	"github.com/numbatx/gn-core/core/check"
 	"github.com/numbatx/gn-core/data/dct"
 	"github.com/numbatx/gn-core/data/vm"
+	logger "github.com/numbatx/gn-logger"
 	"github.com/numbatx/gn-vm-common"
 )
 
-var noncePrefix = []byte(core.NumbatProtectedKeyPrefix + core.DCTNFTLatestNonceIdentifier)
+var (
+	log         = logger.GetOrCreate("builtInFunctions")
+	noncePrefix = []byte(core.NumbatProtectedKeyPrefix + core.DCTNFTLatestNonceIdentifier)
+)
 
 type dctNFTCreate struct {
-	baseAlwaysActive
+	baseAlwaysActiveHandler
 	keyPrefix             []byte
 	accounts              vmcommon.AccountsAdapter
-	marshalizer           vmcommon.Marshalizer
+	marshaller            vmcommon.Marshalizer
 	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler
 	rolesHandler          vmcommon.DCTRoleHandler
 	funcGasCost           uint64
 	gasConfig             vmcommon.BaseOperationCost
 	dctStorageHandler    vmcommon.DCTNFTStorageHandler
+	enableEpochsHandler   vmcommon.EnableEpochsHandler
 	mutExecution          sync.RWMutex
-
-	valueLengthCheckEnableEpoch uint32
-	flagValueLengthCheck        atomic.Flag
 }
 
 // NewDCTNFTCreateFunc returns the dct NFT create built-in function component
 func NewDCTNFTCreateFunc(
 	funcGasCost uint64,
 	gasConfig vmcommon.BaseOperationCost,
-	marshalizer vmcommon.Marshalizer,
+	marshaller vmcommon.Marshalizer,
 	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler,
 	rolesHandler vmcommon.DCTRoleHandler,
 	dctStorageHandler vmcommon.DCTNFTStorageHandler,
 	accounts vmcommon.AccountsAdapter,
-	valueLengthCheckEnableEpoch uint32,
-	epochNotifier vmcommon.EpochNotifier,
+	enableEpochsHandler vmcommon.EnableEpochsHandler,
 ) (*dctNFTCreate, error) {
-	if check.IfNil(marshalizer) {
+	if check.IfNil(marshaller) {
 		return nil, ErrNilMarshalizer
 	}
 	if check.IfNil(globalSettingsHandler) {
@@ -56,35 +56,27 @@ func NewDCTNFTCreateFunc(
 	if check.IfNil(dctStorageHandler) {
 		return nil, ErrNilDCTNFTStorageHandler
 	}
-	if check.IfNil(epochNotifier) {
-		return nil, ErrNilEpochHandler
+	if check.IfNil(enableEpochsHandler) {
+		return nil, ErrNilEnableEpochsHandler
 	}
 	if check.IfNil(accounts) {
 		return nil, ErrNilAccountsAdapter
 	}
 
 	e := &dctNFTCreate{
-		keyPrefix:                   []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
-		marshalizer:                 marshalizer,
-		globalSettingsHandler:       globalSettingsHandler,
-		rolesHandler:                rolesHandler,
-		funcGasCost:                 funcGasCost,
-		gasConfig:                   gasConfig,
-		dctStorageHandler:          dctStorageHandler,
-		mutExecution:                sync.RWMutex{},
-		valueLengthCheckEnableEpoch: valueLengthCheckEnableEpoch,
-		accounts:                    accounts,
+		keyPrefix:             []byte(baseDCTKeyPrefix),
+		marshaller:            marshaller,
+		globalSettingsHandler: globalSettingsHandler,
+		rolesHandler:          rolesHandler,
+		funcGasCost:           funcGasCost,
+		gasConfig:             gasConfig,
+		dctStorageHandler:    dctStorageHandler,
+		enableEpochsHandler:   enableEpochsHandler,
+		mutExecution:          sync.RWMutex{},
+		accounts:              accounts,
 	}
 
-	epochNotifier.RegisterNotifyHandler(e)
-
 	return e, nil
-}
-
-// EpochConfirmed is called whenever a new epoch is confirmed
-func (e *dctNFTCreate) EpochConfirmed(epoch uint32, _ uint64) {
-	e.flagValueLengthCheck.SetValue(epoch >= e.valueLengthCheckEnableEpoch)
-	log.Debug("DCT NFT Create quantity value length check", "enabled", e.flagValueLengthCheck.IsSet())
 }
 
 // SetNewGasConfig is called whenever gas cost is changed
@@ -184,7 +176,8 @@ func (e *dctNFTCreate) ProcessBuiltinFunction(
 			return nil, err
 		}
 	}
-	if e.flagValueLengthCheck.IsSet() && len(vmInput.Arguments[1]) > maxLenForAddNFTQuantity {
+	isValueLengthCheckFlagEnabled := e.enableEpochsHandler.IsValueLengthCheckFlagEnabled()
+	if isValueLengthCheckFlagEnabled && len(vmInput.Arguments[1]) > maxLenForAddNFTQuantity {
 		return nil, fmt.Errorf("%w max length for quantity in nft create is %d", ErrInvalidArguments, maxLenForAddNFTQuantity)
 	}
 
@@ -203,8 +196,11 @@ func (e *dctNFTCreate) ProcessBuiltinFunction(
 		},
 	}
 
-	var dctDataBytes []byte
-	dctDataBytes, err = e.dctStorageHandler.SaveDCTNFTToken(accountWithRoles.AddressBytes(), accountWithRoles, dctTokenKey, nextNonce, dctData, true, vmInput.ReturnCallAfterError)
+	_, err = e.dctStorageHandler.SaveDCTNFTToken(accountWithRoles.AddressBytes(), accountWithRoles, dctTokenKey, nextNonce, dctData, true, vmInput.ReturnCallAfterError)
+	if err != nil {
+		return nil, err
+	}
+	err = e.dctStorageHandler.AddToLiquiditySystemAcc(dctTokenKey, nextNonce, quantity)
 	if err != nil {
 		return nil, err
 	}
@@ -225,6 +221,11 @@ func (e *dctNFTCreate) ProcessBuiltinFunction(
 		ReturnCode:   vmcommon.Ok,
 		GasRemaining: vmInput.GasProvided - gasToUse,
 		ReturnData:   [][]byte{big.NewInt(0).SetUint64(nextNonce).Bytes()},
+	}
+
+	dctDataBytes, err := e.marshaller.Marshal(dctData)
+	if err != nil {
+		log.Warn("dctNFTCreate.ProcessBuiltinFunction: cannot marshall dct data for log", "error", err)
 	}
 
 	addDCTEntryInVMOutput(vmOutput, []byte(core.BuiltInFunctionDCTNFTCreate), vmInput.Arguments[0], nextNonce, quantity, vmInput.CallerAddr, dctDataBytes)
@@ -248,7 +249,7 @@ func (e *dctNFTCreate) getAccount(address []byte) (vmcommon.UserAccountHandler, 
 
 func getLatestNonce(acnt vmcommon.UserAccountHandler, tokenID []byte) (uint64, error) {
 	nonceKey := getNonceKey(tokenID)
-	nonceData, err := acnt.AccountDataHandler().RetrieveValue(nonceKey)
+	nonceData, _, err := acnt.AccountDataHandler().RetrieveValue(nonceKey)
 	if err != nil {
 		return 0, err
 	}

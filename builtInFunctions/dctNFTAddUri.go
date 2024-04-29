@@ -5,13 +5,12 @@ import (
 	"sync"
 
 	"github.com/numbatx/gn-core/core"
-	"github.com/numbatx/gn-core/core/atomic"
 	"github.com/numbatx/gn-core/core/check"
 	"github.com/numbatx/gn-vm-common"
 )
 
 type dctNFTAddUri struct {
-	*baseEnabled
+	baseActiveHandler
 	keyPrefix             []byte
 	dctStorageHandler    vmcommon.DCTNFTStorageHandler
 	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler
@@ -28,8 +27,7 @@ func NewDCTNFTAddUriFunc(
 	dctStorageHandler vmcommon.DCTNFTStorageHandler,
 	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler,
 	rolesHandler vmcommon.DCTRoleHandler,
-	activationEpoch uint32,
-	epochNotifier vmcommon.EpochNotifier,
+	enableEpochsHandler vmcommon.EnableEpochsHandler,
 ) (*dctNFTAddUri, error) {
 	if check.IfNil(dctStorageHandler) {
 		return nil, ErrNilDCTNFTStorageHandler
@@ -40,12 +38,12 @@ func NewDCTNFTAddUriFunc(
 	if check.IfNil(rolesHandler) {
 		return nil, ErrNilRolesHandler
 	}
-	if check.IfNil(epochNotifier) {
-		return nil, ErrNilEpochHandler
+	if check.IfNil(enableEpochsHandler) {
+		return nil, ErrNilEnableEpochsHandler
 	}
 
 	e := &dctNFTAddUri{
-		keyPrefix:             []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
+		keyPrefix:             []byte(baseDCTKeyPrefix),
 		dctStorageHandler:    dctStorageHandler,
 		funcGasCost:           funcGasCost,
 		mutExecution:          sync.RWMutex{},
@@ -54,13 +52,7 @@ func NewDCTNFTAddUriFunc(
 		rolesHandler:          rolesHandler,
 	}
 
-	e.baseEnabled = &baseEnabled{
-		function:        core.BuiltInFunctionDCTNFTAddURI,
-		activationEpoch: activationEpoch,
-		flagActivated:   atomic.Flag{},
-	}
-
-	epochNotifier.RegisterNotifyHandler(e)
+	e.baseActiveHandler.activeHandler = enableEpochsHandler.IsDCTNFTImprovementV1FlagEnabled
 
 	return e, nil
 }

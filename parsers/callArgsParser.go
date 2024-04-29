@@ -1,5 +1,9 @@
 package parsers
 
+import (
+	"strings"
+)
+
 type callArgsParser struct {
 }
 
@@ -32,11 +36,26 @@ func (parser *callArgsParser) ParseData(data string) (string, [][]byte, error) {
 	return function, arguments, nil
 }
 
+// ParseArguments parses strings of the following format:
+// argFoo@hex(argBarHex)...
+func (parser *callArgsParser) ParseArguments(data string) ([][]byte, error) {
+	tokens := strings.Split(data, atSeparator)
+	arguments := make([][]byte, 0, len(tokens))
+	arguments = append(arguments, []byte(tokens[0]))
+	parsedArgs, err := parser.parseArguments(tokens)
+	if err != nil {
+		return nil, err
+	}
+	arguments = append(arguments, parsedArgs...)
+
+	return arguments, nil
+}
+
 func (parser *callArgsParser) parseFunction(tokens []string) (string, error) {
 	if len(tokens) < minNumCallArguments {
 		return "", ErrNilFunction
-	}
 
+	}
 	function := tokens[indexOfFunction]
 	return function, nil
 }

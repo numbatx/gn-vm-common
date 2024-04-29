@@ -167,7 +167,7 @@ func TestDctTransferParser_ParseMultiNFTTransferTransferOne(t *testing.T) {
 	assert.Equal(t, parsedData.CallFunction, "function")
 
 	dctData := &dct.DCToken{Value: big.NewInt(20)}
-	marshaled, _ := dctParser.marshalizer.Marshal(dctData)
+	marshaled, _ := dctParser.marshaller.Marshal(dctData)
 
 	parsedData, err = dctParser.ParseDCTTransfers(
 		sndAddr,
@@ -223,7 +223,7 @@ func TestDctTransferParser_ParseMultiNFTTransferTransferMore(t *testing.T) {
 	assert.Equal(t, parsedData.CallFunction, "function")
 
 	dctData := &dct.DCToken{Value: big.NewInt(20)}
-	marshaled, _ := dctParser.marshalizer.Marshal(dctData)
+	marshaled, _ := dctParser.marshaller.Marshal(dctData)
 	parsedData, err = dctParser.ParseDCTTransfers(
 		sndAddr,
 		dstAddr,

@@ -6,15 +6,14 @@ import (
 	"sync"
 
 	"github.com/numbatx/gn-core/core"
-	"github.com/numbatx/gn-core/core/atomic"
 	"github.com/numbatx/gn-core/core/check"
 	"github.com/numbatx/gn-vm-common"
 )
 
 type dctBurn struct {
-	*baseDisabled
+	baseActiveHandler
 	funcGasCost           uint64
-	marshalizer           vmcommon.Marshalizer
+	marshaller            vmcommon.Marshalizer
 	keyPrefix             []byte
 	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler
 	mutExecution          sync.RWMutex
@@ -23,32 +22,28 @@ type dctBurn struct {
 // NewDCTBurnFunc returns the dct burn built-in function component
 func NewDCTBurnFunc(
 	funcGasCost uint64,
-	marshalizer vmcommon.Marshalizer,
+	marshaller vmcommon.Marshalizer,
 	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler,
-	disableEpoch uint32,
-	epochNotifier vmcommon.EpochNotifier,
+	enableEpochsHandler vmcommon.EnableEpochsHandler,
 ) (*dctBurn, error) {
-	if check.IfNil(marshalizer) {
+	if check.IfNil(marshaller) {
 		return nil, ErrNilMarshalizer
 	}
 	if check.IfNil(globalSettingsHandler) {
 		return nil, ErrNilGlobalSettingsHandler
 	}
+	if check.IfNil(enableEpochsHandler) {
+		return nil, ErrNilEnableEpochsHandler
+	}
 
 	e := &dctBurn{
 		funcGasCost:           funcGasCost,
-		marshalizer:           marshalizer,
-		keyPrefix:             []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
+		marshaller:            marshaller,
+		keyPrefix:             []byte(baseDCTKeyPrefix),
 		globalSettingsHandler: globalSettingsHandler,
 	}
 
-	e.baseDisabled = &baseDisabled{
-		function:          core.BuiltInFunctionDCTBurn,
-		deActivationEpoch: disableEpoch,
-		flagActivated:     atomic.Flag{},
-	}
-
-	epochNotifier.RegisterNotifyHandler(e)
+	e.baseActiveHandler.activeHandler = enableEpochsHandler.IsGlobalMintBurnFlagEnabled
 
 	return e, nil
 }
@@ -96,7 +91,7 @@ func (e *dctBurn) ProcessBuiltinFunction(
 		return nil, ErrNotEnoughGas
 	}
 
-	err = addToDCTBalance(acntSnd, dctTokenKey, big.NewInt(0).Neg(value), e.marshalizer, e.globalSettingsHandler, vmInput.ReturnCallAfterError)
+	err = addToDCTBalance(acntSnd, dctTokenKey, big.NewInt(0).Neg(value), e.marshaller, e.globalSettingsHandler, vmInput.ReturnCallAfterError)
 	if err != nil {
 		return nil, err
 	}

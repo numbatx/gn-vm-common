@@ -5,17 +5,50 @@ import (
 	"testing"
 
 	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/core/check"
 	"github.com/numbatx/gn-core/data/dct"
 	"github.com/numbatx/gn-vm-common"
 	"github.com/numbatx/gn-vm-common/mock"
 	"github.com/stretchr/testify/assert"
 )
 
+func TestNewDCTBurnFunc(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil marshaller should error", func(t *testing.T) {
+		t.Parallel()
+
+		burnFunc, err := NewDCTBurnFunc(10, nil, &mock.GlobalSettingsHandlerStub{}, &mock.EnableEpochsHandlerStub{
+			IsGlobalMintBurnFlagEnabledField: true,
+		})
+		assert.Equal(t, ErrNilMarshalizer, err)
+		assert.True(t, check.IfNil(burnFunc))
+	})
+	t.Run("nil enable epochs handler should error", func(t *testing.T) {
+		t.Parallel()
+
+		burnFunc, err := NewDCTBurnFunc(10, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, nil)
+		assert.Equal(t, ErrNilEnableEpochsHandler, err)
+		assert.True(t, check.IfNil(burnFunc))
+	})
+	t.Run("should work", func(t *testing.T) {
+		t.Parallel()
+
+		burnFunc, err := NewDCTBurnFunc(10, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, &mock.EnableEpochsHandlerStub{
+			IsGlobalMintBurnFlagEnabledField: true,
+		})
+		assert.Nil(t, err)
+		assert.False(t, check.IfNil(burnFunc))
+	})
+}
+
 func TestDCTBurn_ProcessBuiltInFunctionErrors(t *testing.T) {
 	t.Parallel()
 
 	globalSettingsHandler := &mock.GlobalSettingsHandlerStub{}
-	burnFunc, _ := NewDCTBurnFunc(10, &mock.MarshalizerMock{}, globalSettingsHandler, 1000, &mock.EpochNotifierStub{})
+	burnFunc, _ := NewDCTBurnFunc(10, &mock.MarshalizerMock{}, globalSettingsHandler, &mock.EnableEpochsHandlerStub{
+		IsGlobalMintBurnFlagEnabledField: true,
+	})
 	_, err := burnFunc.ProcessBuiltinFunction(nil, nil, nil)
 	assert.Equal(t, err, ErrNilVmInput)
 
@@ -59,9 +92,11 @@ func TestDCTBurn_ProcessBuiltInFunctionErrors(t *testing.T) {
 func TestDCTBurn_ProcessBuiltInFunctionSenderBurns(t *testing.T) {
 	t.Parallel()
 
-	marshalizer := &mock.MarshalizerMock{}
+	marshaller := &mock.MarshalizerMock{}
 	globalSettingsHandler := &mock.GlobalSettingsHandlerStub{}
-	burnFunc, _ := NewDCTBurnFunc(10, marshalizer, globalSettingsHandler, 1000, &mock.EpochNotifierStub{})
+	burnFunc, _ := NewDCTBurnFunc(10, marshaller, globalSettingsHandler, &mock.EnableEpochsHandlerStub{
+		IsGlobalMintBurnFlagEnabledField: true,
+	})
 
 	input := &vmcommon.ContractCallInput{
 		VMInput: vmcommon.VMInput{
@@ -80,7 +115,7 @@ func TestDCTBurn_ProcessBuiltInFunctionSenderBurns(t *testing.T) {
 
 	dctKey := append(burnFunc.keyPrefix, key...)
 	dctToken := &dct.DCToken{Value: big.NewInt(100), Properties: dctFrozen.ToBytes()}
-	marshaledData, _ := marshalizer.Marshal(dctToken)
+	marshaledData, _ := marshaller.Marshal(dctToken)
 	_ = accSnd.AccountDataHandler().SaveKeyValue(dctKey, marshaledData)
 
 	_, err := burnFunc.ProcessBuiltinFunction(accSnd, nil, input)
@@ -90,7 +125,7 @@ func TestDCTBurn_ProcessBuiltInFunctionSenderBurns(t *testing.T) {
 		return true
 	}
 	dctToken = &dct.DCToken{Value: big.NewInt(100), Properties: dctNotFrozen.ToBytes()}
-	marshaledData, _ = marshalizer.Marshal(dctToken)
+	marshaledData, _ = marshaller.Marshal(dctToken)
 	_ = accSnd.AccountDataHandler().SaveKeyValue(dctKey, marshaledData)
 
 	_, err = burnFunc.ProcessBuiltinFunction(accSnd, nil, input)
@@ -102,8 +137,8 @@ func TestDCTBurn_ProcessBuiltInFunctionSenderBurns(t *testing.T) {
 	_, err = burnFunc.ProcessBuiltinFunction(accSnd, nil, input)
 	assert.Nil(t, err)
 
-	marshaledData, _ = accSnd.AccountDataHandler().RetrieveValue(dctKey)
-	_ = marshalizer.Unmarshal(dctToken, marshaledData)
+	marshaledData, _, _ = accSnd.AccountDataHandler().RetrieveValue(dctKey)
+	_ = marshaller.Unmarshal(dctToken, marshaledData)
 	assert.True(t, dctToken.Value.Cmp(big.NewInt(90)) == 0)
 
 	value = big.NewInt(100).Bytes()
@@ -116,6 +151,6 @@ func TestDCTBurn_ProcessBuiltInFunctionSenderBurns(t *testing.T) {
 	_, err = burnFunc.ProcessBuiltinFunction(accSnd, nil, input)
 	assert.Nil(t, err)
 
-	marshaledData, _ = accSnd.AccountDataHandler().RetrieveValue(dctKey)
+	marshaledData, _, _ = accSnd.AccountDataHandler().RetrieveValue(dctKey)
 	assert.Equal(t, len(marshaledData), 0)
 }

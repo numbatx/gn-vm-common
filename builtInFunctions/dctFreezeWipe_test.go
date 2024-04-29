@@ -6,7 +6,7 @@ import (
 
 	"github.com/numbatx/gn-core/core"
 	"github.com/numbatx/gn-core/data/dct"
-	"github.com/numbatx/gn-vm-common"
+	vmcommon "github.com/numbatx/gn-vm-common"
 	"github.com/numbatx/gn-vm-common/mock"
 	"github.com/stretchr/testify/assert"
 )
@@ -14,8 +14,8 @@ import (
 func TestDCTFreezeWipe_ProcessBuiltInFunctionErrors(t *testing.T) {
 	t.Parallel()
 
-	marshalizer := &mock.MarshalizerMock{}
-	freeze, _ := NewDCTFreezeWipeFunc(marshalizer, true, false)
+	marshaller := &mock.MarshalizerMock{}
+	freeze, _ := NewDCTFreezeWipeFunc(marshaller, true, false)
 	_, err := freeze.ProcessBuiltinFunction(nil, nil, nil)
 	assert.Equal(t, err, ErrNilVmInput)
 
@@ -53,23 +53,28 @@ func TestDCTFreezeWipe_ProcessBuiltInFunctionErrors(t *testing.T) {
 
 	input.RecipientAddr = []byte("dst")
 	acnt := mock.NewUserAccount(input.RecipientAddr)
-	_, err = freeze.ProcessBuiltinFunction(nil, acnt, input)
+	vmOutput, err := freeze.ProcessBuiltinFunction(nil, acnt, input)
 	assert.Nil(t, err)
 
-	dctToken := &dct.DCToken{}
+	frozenAmount := big.NewInt(42)
+	dctToken := &dct.DCToken{
+		Value: frozenAmount,
+	}
 	dctKey := append(freeze.keyPrefix, key...)
-	marshaledData, _ := acnt.AccountDataHandler().RetrieveValue(dctKey)
-	_ = marshalizer.Unmarshal(dctToken, marshaledData)
+	marshaledData, _, _ := acnt.AccountDataHandler().RetrieveValue(dctKey)
+	_ = marshaller.Unmarshal(dctToken, marshaledData)
 
 	dctUserData := DCTUserMetadataFromBytes(dctToken.Properties)
 	assert.True(t, dctUserData.Frozen)
+	assert.Len(t, vmOutput.Logs, 1)
+	assert.Equal(t, [][]byte{key, {}, frozenAmount.Bytes(), []byte("dst")}, vmOutput.Logs[0].Topics)
 }
 
 func TestDCTFreezeWipe_ProcessBuiltInFunction(t *testing.T) {
 	t.Parallel()
 
-	marshalizer := &mock.MarshalizerMock{}
-	freeze, _ := NewDCTFreezeWipeFunc(marshalizer, true, false)
+	marshaller := &mock.MarshalizerMock{}
+	freeze, _ := NewDCTFreezeWipeFunc(marshaller, true, false)
 	_, err := freeze.ProcessBuiltinFunction(nil, nil, nil)
 	assert.Equal(t, err, ErrNilVmInput)
 
@@ -85,7 +90,7 @@ func TestDCTFreezeWipe_ProcessBuiltInFunction(t *testing.T) {
 	input.RecipientAddr = []byte("dst")
 	dctKey := append(freeze.keyPrefix, key...)
 	dctToken := &dct.DCToken{Value: big.NewInt(10)}
-	marshaledData, _ := freeze.marshalizer.Marshal(dctToken)
+	marshaledData, _ := freeze.marshaller.Marshal(dctToken)
 	acnt := mock.NewUserAccount(input.RecipientAddr)
 	_ = acnt.AccountDataHandler().SaveKeyValue(dctKey, marshaledData)
 
@@ -93,43 +98,47 @@ func TestDCTFreezeWipe_ProcessBuiltInFunction(t *testing.T) {
 	assert.Nil(t, err)
 
 	dctToken = &dct.DCToken{}
-	marshaledData, _ = acnt.AccountDataHandler().RetrieveValue(dctKey)
-	_ = marshalizer.Unmarshal(dctToken, marshaledData)
+	marshaledData, _, _ = acnt.AccountDataHandler().RetrieveValue(dctKey)
+	_ = marshaller.Unmarshal(dctToken, marshaledData)
 
 	dctUserData := DCTUserMetadataFromBytes(dctToken.Properties)
 	assert.True(t, dctUserData.Frozen)
 
-	unFreeze, _ := NewDCTFreezeWipeFunc(marshalizer, false, false)
+	unFreeze, _ := NewDCTFreezeWipeFunc(marshaller, false, false)
 	_, err = unFreeze.ProcessBuiltinFunction(nil, acnt, input)
 	assert.Nil(t, err)
 
-	marshaledData, _ = acnt.AccountDataHandler().RetrieveValue(dctKey)
-	_ = marshalizer.Unmarshal(dctToken, marshaledData)
+	marshaledData, _, _ = acnt.AccountDataHandler().RetrieveValue(dctKey)
+	_ = marshaller.Unmarshal(dctToken, marshaledData)
 
 	dctUserData = DCTUserMetadataFromBytes(dctToken.Properties)
 	assert.False(t, dctUserData.Frozen)
 
 	// cannot wipe if account is not frozen
-	wipe, _ := NewDCTFreezeWipeFunc(marshalizer, false, true)
+	wipe, _ := NewDCTFreezeWipeFunc(marshaller, false, true)
 	_, err = wipe.ProcessBuiltinFunction(nil, acnt, input)
 	assert.Equal(t, ErrCannotWipeAccountNotFrozen, err)
 
-	marshaledData, _ = acnt.AccountDataHandler().RetrieveValue(dctKey)
+	marshaledData, _, _ = acnt.AccountDataHandler().RetrieveValue(dctKey)
 	assert.NotEqual(t, 0, len(marshaledData))
 
 	// can wipe as account is frozen
 	metaData := DCTUserMetadata{Frozen: true}
+	wipedAmount := big.NewInt(42)
 	dctToken = &dct.DCToken{
+		Value:      wipedAmount,
 		Properties: metaData.ToBytes(),
 	}
-	dctTokenBytes, _ := marshalizer.Marshal(dctToken)
+	dctTokenBytes, _ := marshaller.Marshal(dctToken)
 	err = acnt.AccountDataHandler().SaveKeyValue(dctKey, dctTokenBytes)
 	assert.NoError(t, err)
 
-	wipe, _ = NewDCTFreezeWipeFunc(marshalizer, false, true)
-	_, err = wipe.ProcessBuiltinFunction(nil, acnt, input)
+	wipe, _ = NewDCTFreezeWipeFunc(marshaller, false, true)
+	vmOutput, err := wipe.ProcessBuiltinFunction(nil, acnt, input)
 	assert.NoError(t, err)
 
-	marshaledData, _ = acnt.AccountDataHandler().RetrieveValue(dctKey)
+	marshaledData, _, _ = acnt.AccountDataHandler().RetrieveValue(dctKey)
 	assert.Equal(t, 0, len(marshaledData))
+	assert.Len(t, vmOutput.Logs, 1)
+	assert.Equal(t, [][]byte{key, {}, wipedAmount.Bytes(), []byte("dst")}, vmOutput.Logs[0].Topics)
 }

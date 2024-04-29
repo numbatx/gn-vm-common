@@ -5,9 +5,11 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/numbatx/gn-core/core"
 	"github.com/numbatx/gn-core/data/dct"
 	"github.com/numbatx/gn-vm-common"
 	"github.com/numbatx/gn-vm-common/mock"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -114,8 +116,8 @@ func TestDctLocalMint_ProcessBuiltinFunction_CannotAddToDctBalanceShouldErr(t *t
 	_, err := dctLocalMintF.ProcessBuiltinFunction(&mock.UserAccountStub{
 		AccountDataHandlerCalled: func() vmcommon.AccountDataHandler {
 			return &mock.DataTrieTrackerStub{
-				RetrieveValueCalled: func(key []byte) ([]byte, error) {
-					return nil, localErr
+				RetrieveValueCalled: func(_ []byte) ([]byte, uint32, error) {
+					return nil, 0, localErr
 				},
 				SaveKeyValueCalled: func(key []byte, value []byte) error {
 					return localErr
@@ -134,23 +136,26 @@ func TestDctLocalMint_ProcessBuiltinFunction_CannotAddToDctBalanceShouldErr(t *t
 func TestDctLocalMint_ProcessBuiltinFunction_ShouldWork(t *testing.T) {
 	t.Parallel()
 
-	marshalizer := &mock.MarshalizerMock{}
-	dctLocalMintF, _ := NewDCTLocalMintFunc(50, marshalizer, &mock.GlobalSettingsHandlerStub{}, &mock.DCTRoleHandlerStub{
+	marshaller := &mock.MarshalizerMock{}
+	dctRoleHandler := &mock.DCTRoleHandlerStub{
 		CheckAllowedToExecuteCalled: func(account vmcommon.UserAccountHandler, tokenID []byte, action []byte) error {
+			assert.Equal(t, core.DCTRoleLocalMint, string(action))
 			return nil
 		},
-	})
+	}
+	dctLocalMintF, _ := NewDCTLocalMintFunc(50, marshaller, &mock.GlobalSettingsHandlerStub{}, dctRoleHandler)
 
 	sndAccout := &mock.UserAccountStub{
 		AccountDataHandlerCalled: func() vmcommon.AccountDataHandler {
 			return &mock.DataTrieTrackerStub{
-				RetrieveValueCalled: func(key []byte) ([]byte, error) {
+				RetrieveValueCalled: func(_ []byte) ([]byte, uint32, error) {
 					dctData := &dct.DCToken{Value: big.NewInt(100)}
-					return marshalizer.Marshal(dctData)
+					serializedDctData, err := marshaller.Marshal(dctData)
+					return serializedDctData, 0, err
 				},
 				SaveKeyValueCalled: func(key []byte, value []byte) error {
 					dctData := &dct.DCToken{}
-					_ = marshalizer.Unmarshal(dctData, value)
+					_ = marshaller.Unmarshal(dctData, value)
 					require.Equal(t, big.NewInt(101), dctData.Value)
 					return nil
 				},

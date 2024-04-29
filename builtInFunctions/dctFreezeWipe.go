@@ -10,28 +10,28 @@ import (
 )
 
 type dctFreezeWipe struct {
-	baseAlwaysActive
-	marshalizer vmcommon.Marshalizer
-	keyPrefix   []byte
-	wipe        bool
-	freeze      bool
+	baseAlwaysActiveHandler
+	marshaller vmcommon.Marshalizer
+	keyPrefix  []byte
+	wipe       bool
+	freeze     bool
 }
 
 // NewDCTFreezeWipeFunc returns the dct freeze/un-freeze/wipe built-in function component
 func NewDCTFreezeWipeFunc(
-	marshalizer vmcommon.Marshalizer,
+	marshaller vmcommon.Marshalizer,
 	freeze bool,
 	wipe bool,
 ) (*dctFreezeWipe, error) {
-	if check.IfNil(marshalizer) {
+	if check.IfNil(marshaller) {
 		return nil, ErrNilMarshalizer
 	}
 
 	e := &dctFreezeWipe{
-		marshalizer: marshalizer,
-		keyPrefix:   []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
-		freeze:      freeze,
-		wipe:        wipe,
+		marshaller: marshaller,
+		keyPrefix:  []byte(baseDCTKeyPrefix),
+		freeze:     freeze,
+		wipe:       wipe,
 	}
 
 	return e, nil
@@ -64,13 +64,17 @@ func (e *dctFreezeWipe) ProcessBuiltinFunction(
 
 	dctTokenKey := append(e.keyPrefix, vmInput.Arguments[0]...)
 
+	var amount *big.Int
+	var err error
+
 	if e.wipe {
-		err := e.wipeIfApplicable(acntDst, dctTokenKey)
+		amount, err = e.wipeIfApplicable(acntDst, dctTokenKey)
 		if err != nil {
 			return nil, err
 		}
+
 	} else {
-		err := e.toggleFreeze(acntDst, dctTokenKey)
+		amount, err = e.toggleFreeze(acntDst, dctTokenKey)
 		if err != nil {
 			return nil, err
 		}
@@ -78,41 +82,48 @@ func (e *dctFreezeWipe) ProcessBuiltinFunction(
 
 	vmOutput := &vmcommon.VMOutput{ReturnCode: vmcommon.Ok}
 	identifier, nonce := extractTokenIdentifierAndNonceDCTWipe(vmInput.Arguments[0])
-	addDCTEntryInVMOutput(vmOutput, []byte(vmInput.Function), identifier, nonce, big.NewInt(0), vmInput.CallerAddr, acntDst.AddressBytes())
+	addDCTEntryInVMOutput(vmOutput, []byte(vmInput.Function), identifier, nonce, amount, vmInput.CallerAddr, acntDst.AddressBytes())
 
 	return vmOutput, nil
 }
 
-func (e *dctFreezeWipe) wipeIfApplicable(acntDst vmcommon.UserAccountHandler, tokenKey []byte) error {
-	tokenData, err := getDCTDataFromKey(acntDst, tokenKey, e.marshalizer)
+func (e *dctFreezeWipe) wipeIfApplicable(acntDst vmcommon.UserAccountHandler, tokenKey []byte) (*big.Int, error) {
+	tokenData, err := getDCTDataFromKey(acntDst, tokenKey, e.marshaller)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	dctUserMetadata := DCTUserMetadataFromBytes(tokenData.Properties)
 	if !dctUserMetadata.Frozen {
-		return ErrCannotWipeAccountNotFrozen
+		return nil, ErrCannotWipeAccountNotFrozen
 	}
 
-	return acntDst.AccountDataHandler().SaveKeyValue(tokenKey, nil)
+	err = acntDst.AccountDataHandler().SaveKeyValue(tokenKey, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	wipedAmount := vmcommon.ZeroValueIfNil(tokenData.Value)
+	return wipedAmount, nil
 }
 
-func (e *dctFreezeWipe) toggleFreeze(acntDst vmcommon.UserAccountHandler, tokenKey []byte) error {
-	tokenData, err := getDCTDataFromKey(acntDst, tokenKey, e.marshalizer)
+func (e *dctFreezeWipe) toggleFreeze(acntDst vmcommon.UserAccountHandler, tokenKey []byte) (*big.Int, error) {
+	tokenData, err := getDCTDataFromKey(acntDst, tokenKey, e.marshaller)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	dctUserMetadata := DCTUserMetadataFromBytes(tokenData.Properties)
 	dctUserMetadata.Frozen = e.freeze
 	tokenData.Properties = dctUserMetadata.ToBytes()
 
-	err = saveDCTData(acntDst, tokenData, tokenKey, e.marshalizer)
+	err = saveDCTData(acntDst, tokenData, tokenKey, e.marshaller)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	frozenAmount := vmcommon.ZeroValueIfNil(tokenData.Value)
+	return frozenAmount, nil
 }
 
 // IsInterfaceNil returns true if underlying object in nil

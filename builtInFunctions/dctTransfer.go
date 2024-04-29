@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/numbatx/gn-core/core"
-	"github.com/numbatx/gn-core/core/atomic"
 	"github.com/numbatx/gn-core/core/check"
 	"github.com/numbatx/gn-core/data/dct"
 	"github.com/numbatx/gn-core/data/vm"
@@ -17,37 +16,29 @@ import (
 var zero = big.NewInt(0)
 
 type dctTransfer struct {
-	baseAlwaysActive
+	baseAlwaysActiveHandler
 	funcGasCost           uint64
-	marshalizer           vmcommon.Marshalizer
+	marshaller            vmcommon.Marshalizer
 	keyPrefix             []byte
-	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler
-	payableHandler        vmcommon.PayableHandler
+	globalSettingsHandler vmcommon.ExtendedDCTGlobalSettingsHandler
+	payableHandler        vmcommon.PayableChecker
 	shardCoordinator      vmcommon.Coordinator
 	mutExecution          sync.RWMutex
 
-	rolesHandler                     vmcommon.DCTRoleHandler
-	transferToMetaEnableEpoch        uint32
-	flagTransferToMeta               atomic.Flag
-	checkCorrectTokenIDEnableEpoch   uint32
-	flagCheckCorrectTokenID          atomic.Flag
-	checkFunctionArgumentEnableEpoch uint32
-	flagCheckFunctionArgument        atomic.Flag
+	rolesHandler        vmcommon.DCTRoleHandler
+	enableEpochsHandler vmcommon.EnableEpochsHandler
 }
 
 // NewDCTTransferFunc returns the dct transfer built-in function component
 func NewDCTTransferFunc(
 	funcGasCost uint64,
-	marshalizer vmcommon.Marshalizer,
-	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler,
+	marshaller vmcommon.Marshalizer,
+	globalSettingsHandler vmcommon.ExtendedDCTGlobalSettingsHandler,
 	shardCoordinator vmcommon.Coordinator,
 	rolesHandler vmcommon.DCTRoleHandler,
-	transferToMetaEnableEpoch uint32,
-	checkCorrectTokenIDEnableEpoch uint32,
-	checkFunctionArgumentEnableEpoch uint32,
-	epochNotifier vmcommon.EpochNotifier,
+	enableEpochsHandler vmcommon.EnableEpochsHandler,
 ) (*dctTransfer, error) {
-	if check.IfNil(marshalizer) {
+	if check.IfNil(marshaller) {
 		return nil, ErrNilMarshalizer
 	}
 	if check.IfNil(globalSettingsHandler) {
@@ -59,36 +50,22 @@ func NewDCTTransferFunc(
 	if check.IfNil(rolesHandler) {
 		return nil, ErrNilRolesHandler
 	}
-	if check.IfNil(epochNotifier) {
-		return nil, ErrNilEpochHandler
+	if check.IfNil(enableEpochsHandler) {
+		return nil, ErrNilEnableEpochsHandler
 	}
 
 	e := &dctTransfer{
-		funcGasCost:                      funcGasCost,
-		marshalizer:                      marshalizer,
-		keyPrefix:                        []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
-		globalSettingsHandler:            globalSettingsHandler,
-		payableHandler:                   &disabledPayableHandler{},
-		shardCoordinator:                 shardCoordinator,
-		rolesHandler:                     rolesHandler,
-		checkCorrectTokenIDEnableEpoch:   checkCorrectTokenIDEnableEpoch,
-		transferToMetaEnableEpoch:        transferToMetaEnableEpoch,
-		checkFunctionArgumentEnableEpoch: checkFunctionArgumentEnableEpoch,
+		funcGasCost:           funcGasCost,
+		marshaller:            marshaller,
+		keyPrefix:             []byte(baseDCTKeyPrefix),
+		globalSettingsHandler: globalSettingsHandler,
+		payableHandler:        &disabledPayableHandler{},
+		shardCoordinator:      shardCoordinator,
+		rolesHandler:          rolesHandler,
+		enableEpochsHandler:   enableEpochsHandler,
 	}
 
-	epochNotifier.RegisterNotifyHandler(e)
-
 	return e, nil
-}
-
-// EpochConfirmed is called whenever a new epoch is confirmed
-func (e *dctTransfer) EpochConfirmed(epoch uint32, _ uint64) {
-	e.flagTransferToMeta.SetValue(epoch >= e.transferToMetaEnableEpoch)
-	log.Debug("DCT transfer to metachain flag", "enabled", e.flagTransferToMeta.IsSet())
-	e.flagCheckCorrectTokenID.SetValue(epoch >= e.checkCorrectTokenIDEnableEpoch)
-	log.Debug("DCT transfer check correct tokenID for transfer role", "enabled", e.flagCheckCorrectTokenID.IsSet())
-	e.flagCheckFunctionArgument.SetValue(epoch >= e.checkFunctionArgumentEnableEpoch)
-	log.Debug("DCT transfer check function argument", "enabled", e.flagCheckFunctionArgument.IsSet())
 }
 
 // SetNewGasConfig is called whenever gas cost is changed
@@ -114,7 +91,7 @@ func (e *dctTransfer) ProcessBuiltinFunction(
 	if err != nil {
 		return nil, err
 	}
-	isInvalidTransferToMeta := e.shardCoordinator.ComputeId(vmInput.RecipientAddr) == core.MetachainShardId && !e.flagTransferToMeta.IsSet()
+	isInvalidTransferToMeta := e.shardCoordinator.ComputeId(vmInput.RecipientAddr) == core.MetachainShardId && !e.enableEpochsHandler.IsTransferToMetaFlagEnabled()
 	if isInvalidTransferToMeta {
 		return nil, ErrInvalidRcvAddr
 	}
@@ -129,11 +106,11 @@ func (e *dctTransfer) ProcessBuiltinFunction(
 	tokenID := vmInput.Arguments[0]
 
 	keyToCheck := dctTokenKey
-	if e.flagCheckCorrectTokenID.IsSet() {
+	if e.enableEpochsHandler.IsCheckCorrectTokenIDForTransferRoleFlagEnabled() {
 		keyToCheck = tokenID
 	}
 
-	err = checkIfTransferCanHappenWithLimitedTransfer(keyToCheck, dctTokenKey, e.globalSettingsHandler, e.rolesHandler, acntSnd, acntDst, vmInput.ReturnCallAfterError)
+	err = checkIfTransferCanHappenWithLimitedTransfer(keyToCheck, dctTokenKey, vmInput.CallerAddr, vmInput.RecipientAddr, e.globalSettingsHandler, e.rolesHandler, acntSnd, acntDst, vmInput.ReturnCallAfterError)
 	if err != nil {
 		return nil, err
 	}
@@ -144,26 +121,21 @@ func (e *dctTransfer) ProcessBuiltinFunction(
 			return nil, ErrNotEnoughGas
 		}
 
-		err = addToDCTBalance(acntSnd, dctTokenKey, big.NewInt(0).Neg(value), e.marshalizer, e.globalSettingsHandler, vmInput.ReturnCallAfterError)
+		err = addToDCTBalance(acntSnd, dctTokenKey, big.NewInt(0).Neg(value), e.marshaller, e.globalSettingsHandler, vmInput.ReturnCallAfterError)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	isSCCallAfter := determineIsSCCallAfter(vmInput, vmInput.RecipientAddr, core.MinLenArgumentsDCTTransfer, e.flagCheckFunctionArgument.IsSet())
+	isSCCallAfter := e.payableHandler.DetermineIsSCCallAfter(vmInput, vmInput.RecipientAddr, core.MinLenArgumentsDCTTransfer)
 	vmOutput := &vmcommon.VMOutput{GasRemaining: gasRemaining, ReturnCode: vmcommon.Ok}
 	if !check.IfNil(acntDst) {
-		if mustVerifyPayable(vmInput, core.MinLenArgumentsDCTTransfer, e.flagCheckFunctionArgument.IsSet()) {
-			isPayable, errPayable := e.payableHandler.IsPayable(vmInput.CallerAddr, vmInput.RecipientAddr)
-			if errPayable != nil {
-				return nil, errPayable
-			}
-			if !isPayable {
-				return nil, ErrAccountNotPayable
-			}
+		err = e.payableHandler.CheckPayable(vmInput, vmInput.RecipientAddr, core.MinLenArgumentsDCTTransfer)
+		if err != nil {
+			return nil, err
 		}
 
-		err = addToDCTBalance(acntDst, dctTokenKey, value, e.marshalizer, e.globalSettingsHandler, vmInput.ReturnCallAfterError)
+		err = addToDCTBalance(acntDst, dctTokenKey, value, e.marshaller, e.globalSettingsHandler, vmInput.ReturnCallAfterError)
 		if err != nil {
 			return nil, err
 		}
@@ -213,45 +185,6 @@ func (e *dctTransfer) ProcessBuiltinFunction(
 	return vmOutput, nil
 }
 
-func determineIsSCCallAfter(vmInput *vmcommon.ContractCallInput, destAddress []byte, minLenArguments int, checkEmptyFunction bool) bool {
-	if len(vmInput.Arguments) <= minLenArguments {
-		return false
-	}
-	if vmInput.ReturnCallAfterError && vmInput.CallType != vm.AsynchronousCallBack {
-		return false
-	}
-	if !vmcommon.IsSmartContractAddress(destAddress) {
-		return false
-	}
-	if checkEmptyFunction {
-		if len(vmInput.Arguments[minLenArguments]) == 0 {
-			return false
-		}
-	}
-
-	return true
-}
-
-func mustVerifyPayable(vmInput *vmcommon.ContractCallInput, minLenArguments int, checkEmptyFunction bool) bool {
-	if vmInput.CallType == vm.AsynchronousCall || vmInput.CallType == vm.DCTTransferAndExecute {
-		return false
-	}
-	if bytes.Equal(vmInput.CallerAddr, core.DCTSCAddress) {
-		return false
-	}
-	if len(vmInput.Arguments) > minLenArguments {
-		if checkEmptyFunction {
-			if len(vmInput.Arguments[minLenArguments]) > 0 {
-				return false
-			}
-		} else {
-			return false
-		}
-	}
-
-	return true
-}
-
 func addOutputTransferToVMOutput(
 	senderAddress []byte,
 	function string,
@@ -285,11 +218,11 @@ func addToDCTBalance(
 	userAcnt vmcommon.UserAccountHandler,
 	key []byte,
 	value *big.Int,
-	marshalizer vmcommon.Marshalizer,
+	marshaller vmcommon.Marshalizer,
 	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler,
 	isReturnWithError bool,
 ) error {
-	dctData, err := getDCTDataFromKey(userAcnt, key, marshalizer)
+	dctData, err := getDCTDataFromKey(userAcnt, key, marshaller)
 	if err != nil {
 		return err
 	}
@@ -308,7 +241,7 @@ func addToDCTBalance(
 		return ErrInsufficientFunds
 	}
 
-	err = saveDCTData(userAcnt, dctData, key, marshalizer)
+	err = saveDCTData(userAcnt, dctData, key, marshaller)
 	if err != nil {
 		return err
 	}
@@ -355,14 +288,14 @@ func saveDCTData(
 	userAcnt vmcommon.UserAccountHandler,
 	dctData *dct.DCToken,
 	key []byte,
-	marshalizer vmcommon.Marshalizer,
+	marshaller vmcommon.Marshalizer,
 ) error {
 	isValueZero := dctData.Value.Cmp(zero) == 0
 	if isValueZero && arePropertiesEmpty(dctData.Properties) {
 		return userAcnt.AccountDataHandler().SaveKeyValue(key, nil)
 	}
 
-	marshaledData, err := marshalizer.Marshal(dctData)
+	marshaledData, err := marshaller.Marshal(dctData)
 	if err != nil {
 		return err
 	}
@@ -373,15 +306,15 @@ func saveDCTData(
 func getDCTDataFromKey(
 	userAcnt vmcommon.UserAccountHandler,
 	key []byte,
-	marshalizer vmcommon.Marshalizer,
+	marshaller vmcommon.Marshalizer,
 ) (*dct.DCToken, error) {
 	dctData := &dct.DCToken{Value: big.NewInt(0), Type: uint32(core.Fungible)}
-	marshaledData, err := userAcnt.AccountDataHandler().RetrieveValue(key)
+	marshaledData, _, err := userAcnt.AccountDataHandler().RetrieveValue(key)
 	if err != nil || len(marshaledData) == 0 {
 		return dctData, nil
 	}
 
-	err = marshalizer.Unmarshal(dctData, marshaledData)
+	err = marshaller.Unmarshal(dctData, marshaledData)
 	if err != nil {
 		return nil, err
 	}
@@ -394,9 +327,9 @@ func getDCTDataFromKey(
 // we cannot transfer a limited dct to destination shard, as there we do not know if that token was transferred or not
 // by an account with transfer account
 func checkIfTransferCanHappenWithLimitedTransfer(
-	tokenID []byte,
-	dctTokenKey []byte,
-	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler,
+	tokenID []byte, dctTokenKey []byte,
+	senderAddress, destinationAddress []byte,
+	globalSettingsHandler vmcommon.ExtendedDCTGlobalSettingsHandler,
 	roleHandler vmcommon.DCTRoleHandler,
 	acntSnd, acntDst vmcommon.UserAccountHandler,
 	isReturnWithError bool,
@@ -411,6 +344,10 @@ func checkIfTransferCanHappenWithLimitedTransfer(
 		return nil
 	}
 
+	if globalSettingsHandler.IsSenderOrDestinationWithTransferRole(senderAddress, destinationAddress, tokenID) {
+		return nil
+	}
+
 	errSender := roleHandler.CheckAllowedToExecute(acntSnd, tokenID, []byte(core.DCTRoleTransfer))
 	if errSender == nil {
 		return nil
@@ -420,8 +357,8 @@ func checkIfTransferCanHappenWithLimitedTransfer(
 	return errDestination
 }
 
-// SetPayableHandler will set the payable handler to the function
-func (e *dctTransfer) SetPayableHandler(payableHandler vmcommon.PayableHandler) error {
+// SetPayableChecker will set the payableCheck handler to the function
+func (e *dctTransfer) SetPayableChecker(payableHandler vmcommon.PayableChecker) error {
 	if check.IfNil(payableHandler) {
 		return ErrNilPayableHandler
 	}

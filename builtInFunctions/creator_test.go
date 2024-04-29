@@ -20,7 +20,8 @@ func createMockArguments() ArgsCreateBuiltInFunctionContainer {
 		Marshalizer:          &mock.MarshalizerMock{},
 		Accounts:             &mock.AccountsStub{},
 		ShardCoordinator:     mock.NewMultiShardsCoordinatorMock(1),
-		EpochNotifier:        &mock.EpochNotifierStub{},
+		EnableEpochsHandler:  &mock.EnableEpochsHandlerStub{},
+		MaxNumOfAddressesForTransferRole: 100,
 	}
 
 	return args
@@ -87,9 +88,9 @@ func TestCreateBuiltInFunctionContainer_Errors(t *testing.T) {
 	assert.Equal(t, err, ErrNilShardCoordinator)
 
 	args = createMockArguments()
-	args.EpochNotifier = nil
+	args.EnableEpochsHandler = nil
 	_, err = NewBuiltInFunctionsCreator(args)
-	assert.Equal(t, err, ErrNilEpochHandler)
+	assert.Equal(t, err, ErrNilEnableEpochsHandler)
 
 	args = createMockArguments()
 	args.Marshalizer = nil
@@ -125,14 +126,14 @@ func TestCreateBuiltInContainter_Create(t *testing.T) {
 	args := createMockArguments()
 	f, _ := NewBuiltInFunctionsCreator(args)
 
-	container, err := f.CreateBuiltInFunctionContainer()
+	err := f.CreateBuiltInFunctionContainer()
 	assert.Nil(t, err)
-	assert.Equal(t, container.Len(), 25)
+	assert.Equal(t, f.BuiltInFunctionContainer().Len(), 31)
 
-	err = SetPayableHandler(container, nil)
+	err = f.SetPayableHandler(nil)
 	assert.NotNil(t, err)
 
-	err = SetPayableHandler(container, &mock.PayableHandlerStub{})
+	err = f.SetPayableHandler(&mock.PayableHandlerStub{})
 	assert.Nil(t, err)
 
 	fillGasMapInternal(args.GasMap, 5)

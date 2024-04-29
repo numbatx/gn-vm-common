@@ -7,44 +7,37 @@ import (
 	"github.com/mitchellh/mapstructure"
 )
 
+var _ vmcommon.BuiltInFunctionFactory = (*builtInFuncCreator)(nil)
+
+var trueHandler = func() bool { return true }
+var falseHandler = func() bool { return false }
+
 // ArgsCreateBuiltInFunctionContainer defines the input arguments to create built in functions container
 type ArgsCreateBuiltInFunctionContainer struct {
-	GasMap                              map[string]map[string]uint64
-	MapDNSAddresses                     map[string]struct{}
-	EnableUserNameChange                bool
-	Marshalizer                         vmcommon.Marshalizer
-	Accounts                            vmcommon.AccountsAdapter
-	ShardCoordinator                    vmcommon.Coordinator
-	EpochNotifier                       vmcommon.EpochNotifier
-	DCTNFTImprovementV1ActivationEpoch uint32
-	DCTTransferRoleEnableEpoch         uint32
-	GlobalMintBurnDisableEpoch          uint32
-	DCTTransferToMetaEnableEpoch       uint32
-	NFTCreateMultiShardEnableEpoch      uint32
-	SaveNFTToSystemAccountEnableEpoch   uint32
-	CheckCorrectTokenIDEnableEpoch      uint32
-	CheckFunctionArgumentEnableEpoch    uint32
+	GasMap                           map[string]map[string]uint64
+	MapDNSAddresses                  map[string]struct{}
+	EnableUserNameChange             bool
+	Marshalizer                      vmcommon.Marshalizer
+	Accounts                         vmcommon.AccountsAdapter
+	ShardCoordinator                 vmcommon.Coordinator
+	EnableEpochsHandler              vmcommon.EnableEpochsHandler
+	MaxNumOfAddressesForTransferRole uint32
+	ConfigAddress                    []byte
 }
 
 type builtInFuncCreator struct {
-	mapDNSAddresses                     map[string]struct{}
-	enableUserNameChange                bool
-	marshalizer                         vmcommon.Marshalizer
-	accounts                            vmcommon.AccountsAdapter
-	builtInFunctions                    vmcommon.BuiltInFunctionContainer
-	gasConfig                           *vmcommon.GasCost
-	shardCoordinator                    vmcommon.Coordinator
-	epochNotifier                       vmcommon.EpochNotifier
-	dctStorageHandler                  vmcommon.DCTNFTStorageHandler
-	dctGlobalSettingsHandler           vmcommon.DCTGlobalSettingsHandler
-	dctNFTImprovementV1ActivationEpoch uint32
-	dctTransferRoleEnableEpoch         uint32
-	globalMintBurnDisableEpoch          uint32
-	dctTransferToMetaEnableEpoch       uint32
-	nftCreateMultiShardEnableEpoch      uint32
-	saveNFTToSystemAccountEnableEpoch   uint32
-	checkCorrectTokenIDEnableEpoch      uint32
-	checkFunctionArgumentEnableEpoch    uint32
+	mapDNSAddresses                  map[string]struct{}
+	enableUserNameChange             bool
+	marshaller                       vmcommon.Marshalizer
+	accounts                         vmcommon.AccountsAdapter
+	builtInFunctions                 vmcommon.BuiltInFunctionContainer
+	gasConfig                        *vmcommon.GasCost
+	shardCoordinator                 vmcommon.Coordinator
+	dctStorageHandler               vmcommon.DCTNFTStorageHandler
+	dctGlobalSettingsHandler        vmcommon.DCTGlobalSettingsHandler
+	enableEpochsHandler              vmcommon.EnableEpochsHandler
+	maxNumOfAddressesForTransferRole uint32
+	configAddress                    []byte
 }
 
 // NewBuiltInFunctionsCreator creates a component which will instantiate the built in functions contracts
@@ -61,25 +54,19 @@ func NewBuiltInFunctionsCreator(args ArgsCreateBuiltInFunctionContainer) (*built
 	if check.IfNil(args.ShardCoordinator) {
 		return nil, ErrNilShardCoordinator
 	}
-	if check.IfNil(args.EpochNotifier) {
-		return nil, ErrNilEpochHandler
+	if check.IfNil(args.EnableEpochsHandler) {
+		return nil, ErrNilEnableEpochsHandler
 	}
 
 	b := &builtInFuncCreator{
-		mapDNSAddresses:                     args.MapDNSAddresses,
-		enableUserNameChange:                args.EnableUserNameChange,
-		marshalizer:                         args.Marshalizer,
-		accounts:                            args.Accounts,
-		shardCoordinator:                    args.ShardCoordinator,
-		epochNotifier:                       args.EpochNotifier,
-		dctNFTImprovementV1ActivationEpoch: args.DCTNFTImprovementV1ActivationEpoch,
-		dctTransferRoleEnableEpoch:         args.DCTTransferRoleEnableEpoch,
-		globalMintBurnDisableEpoch:          args.GlobalMintBurnDisableEpoch,
-		dctTransferToMetaEnableEpoch:       args.DCTTransferToMetaEnableEpoch,
-		nftCreateMultiShardEnableEpoch:      args.NFTCreateMultiShardEnableEpoch,
-		saveNFTToSystemAccountEnableEpoch:   args.SaveNFTToSystemAccountEnableEpoch,
-		checkCorrectTokenIDEnableEpoch:      args.CheckCorrectTokenIDEnableEpoch,
-		checkFunctionArgumentEnableEpoch:    args.CheckFunctionArgumentEnableEpoch,
+		mapDNSAddresses:                  args.MapDNSAddresses,
+		enableUserNameChange:             args.EnableUserNameChange,
+		marshaller:                       args.Marshalizer,
+		accounts:                         args.Accounts,
+		shardCoordinator:                 args.ShardCoordinator,
+		enableEpochsHandler:              args.EnableEpochsHandler,
+		maxNumOfAddressesForTransferRole: args.MaxNumOfAddressesForTransferRole,
+		configAddress:                    args.ConfigAddress,
 	}
 
 	var err error
@@ -120,283 +107,334 @@ func (b *builtInFuncCreator) DCTGlobalSettingsHandler() vmcommon.DCTGlobalSettin
 	return b.dctGlobalSettingsHandler
 }
 
+// BuiltInFunctionContainer will return the built in function container
+func (b *builtInFuncCreator) BuiltInFunctionContainer() vmcommon.BuiltInFunctionContainer {
+	return b.builtInFunctions
+}
+
 // CreateBuiltInFunctionContainer will create the list of built-in functions
-func (b *builtInFuncCreator) CreateBuiltInFunctionContainer() (vmcommon.BuiltInFunctionContainer, error) {
+func (b *builtInFuncCreator) CreateBuiltInFunctionContainer() error {
 
 	b.builtInFunctions = NewBuiltInFunctionContainer()
 	var newFunc vmcommon.BuiltinFunction
 	newFunc = NewClaimDeveloperRewardsFunc(b.gasConfig.BuiltInCost.ClaimDeveloperRewards)
 	err := b.builtInFunctions.Add(core.BuiltInFunctionClaimDeveloperRewards, newFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	newFunc = NewChangeOwnerAddressFunc(b.gasConfig.BuiltInCost.ChangeOwnerAddress)
 	err = b.builtInFunctions.Add(core.BuiltInFunctionChangeOwnerAddress, newFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	newFunc, err = NewSaveUserNameFunc(b.gasConfig.BuiltInCost.SaveUserName, b.mapDNSAddresses, b.enableUserNameChange)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	err = b.builtInFunctions.Add(core.BuiltInFunctionSetUserName, newFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	newFunc, err = NewSaveKeyValueStorageFunc(b.gasConfig.BaseOperationCost, b.gasConfig.BuiltInCost.SaveKeyValue)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	err = b.builtInFunctions.Add(core.BuiltInFunctionSaveKeyValue, newFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	globalSettingsFunc, err := NewDCTGlobalSettingsFunc(b.accounts, true, core.BuiltInFunctionDCTPause, 0, b.epochNotifier)
+	globalSettingsFunc, err := NewDCTGlobalSettingsFunc(b.accounts, b.marshaller, true, core.BuiltInFunctionDCTPause, trueHandler)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTPause, globalSettingsFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	b.dctGlobalSettingsHandler = globalSettingsFunc
 
-	setRoleFunc, err := NewDCTRolesFunc(b.marshalizer, true)
+	setRoleFunc, err := NewDCTRolesFunc(b.marshaller, true)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	err = b.builtInFunctions.Add(core.BuiltInFunctionSetDCTRole, setRoleFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	newFunc, err = NewDCTTransferFunc(
 		b.gasConfig.BuiltInCost.DCTTransfer,
-		b.marshalizer,
+		b.marshaller,
 		globalSettingsFunc,
 		b.shardCoordinator,
 		setRoleFunc,
-		b.dctTransferToMetaEnableEpoch,
-		b.checkCorrectTokenIDEnableEpoch,
-		b.checkFunctionArgumentEnableEpoch,
-		b.epochNotifier,
-	)
+		b.enableEpochsHandler)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTTransfer, newFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	newFunc, err = NewDCTBurnFunc(b.gasConfig.BuiltInCost.DCTBurn, b.marshalizer, globalSettingsFunc, b.globalMintBurnDisableEpoch, b.epochNotifier)
+	newFunc, err = NewDCTBurnFunc(b.gasConfig.BuiltInCost.DCTBurn, b.marshaller, globalSettingsFunc, b.enableEpochsHandler)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTBurn, newFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	newFunc, err = NewDCTFreezeWipeFunc(b.marshalizer, true, false)
+	newFunc, err = NewDCTFreezeWipeFunc(b.marshaller, true, false)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTFreeze, newFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	newFunc, err = NewDCTFreezeWipeFunc(b.marshalizer, false, false)
+	newFunc, err = NewDCTFreezeWipeFunc(b.marshaller, false, false)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTUnFreeze, newFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	newFunc, err = NewDCTFreezeWipeFunc(b.marshalizer, false, true)
+	newFunc, err = NewDCTFreezeWipeFunc(b.marshaller, false, true)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTWipe, newFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	newFunc, err = NewDCTGlobalSettingsFunc(b.accounts, false, core.BuiltInFunctionDCTUnPause, 0, b.epochNotifier)
+	newFunc, err = NewDCTGlobalSettingsFunc(b.accounts, b.marshaller, false, core.BuiltInFunctionDCTUnPause, trueHandler)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTUnPause, newFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	newFunc, err = NewDCTRolesFunc(b.marshalizer, false)
+	newFunc, err = NewDCTRolesFunc(b.marshaller, false)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	err = b.builtInFunctions.Add(core.BuiltInFunctionUnSetDCTRole, newFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	newFunc, err = NewDCTLocalBurnFunc(b.gasConfig.BuiltInCost.DCTLocalBurn, b.marshalizer, globalSettingsFunc, setRoleFunc)
+	newFunc, err = NewDCTLocalBurnFunc(b.gasConfig.BuiltInCost.DCTLocalBurn, b.marshaller, globalSettingsFunc, setRoleFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTLocalBurn, newFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	newFunc, err = NewDCTLocalMintFunc(b.gasConfig.BuiltInCost.DCTLocalMint, b.marshalizer, globalSettingsFunc, setRoleFunc)
+	newFunc, err = NewDCTLocalMintFunc(b.gasConfig.BuiltInCost.DCTLocalMint, b.marshaller, globalSettingsFunc, setRoleFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTLocalMint, newFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	args := ArgsNewDCTDataStorage{
-		Accounts:                b.accounts,
-		GlobalSettingsHandler:   globalSettingsFunc,
-		Marshalizer:             b.marshalizer,
-		SaveToSystemEnableEpoch: b.saveNFTToSystemAccountEnableEpoch,
-		EpochNotifier:           b.epochNotifier,
-		ShardCoordinator:        b.shardCoordinator,
+		Accounts:              b.accounts,
+		GlobalSettingsHandler: globalSettingsFunc,
+		Marshalizer:           b.marshaller,
+		EnableEpochsHandler:   b.enableEpochsHandler,
+		ShardCoordinator:      b.shardCoordinator,
 	}
 	b.dctStorageHandler, err = NewDCTDataStorage(args)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	newFunc, err = NewDCTNFTAddQuantityFunc(b.gasConfig.BuiltInCost.DCTNFTAddQuantity, b.dctStorageHandler, globalSettingsFunc, setRoleFunc, b.saveNFTToSystemAccountEnableEpoch, b.epochNotifier)
+	newFunc, err = NewDCTNFTAddQuantityFunc(b.gasConfig.BuiltInCost.DCTNFTAddQuantity, b.dctStorageHandler, globalSettingsFunc, setRoleFunc, b.enableEpochsHandler)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTNFTAddQuantity, newFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	newFunc, err = NewDCTNFTBurnFunc(b.gasConfig.BuiltInCost.DCTNFTBurn, b.dctStorageHandler, globalSettingsFunc, setRoleFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTNFTBurn, newFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	newFunc, err = NewDCTNFTCreateFunc(b.gasConfig.BuiltInCost.DCTNFTCreate, b.gasConfig.BaseOperationCost, b.marshalizer, globalSettingsFunc, setRoleFunc, b.dctStorageHandler, b.accounts, b.saveNFTToSystemAccountEnableEpoch, b.epochNotifier)
+	newFunc, err = NewDCTNFTCreateFunc(b.gasConfig.BuiltInCost.DCTNFTCreate, b.gasConfig.BaseOperationCost, b.marshaller, globalSettingsFunc, setRoleFunc, b.dctStorageHandler, b.accounts, b.enableEpochsHandler)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTNFTCreate, newFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	newFunc, err = NewDCTNFTTransferFunc(
-		b.gasConfig.BuiltInCost.DCTNFTTransfer,
-		b.marshalizer,
+	newFunc, err = NewDCTNFTTransferFunc(b.gasConfig.BuiltInCost.DCTNFTTransfer,
+		b.marshaller,
 		globalSettingsFunc,
 		b.accounts,
 		b.shardCoordinator,
 		b.gasConfig.BaseOperationCost,
 		setRoleFunc,
-		b.dctTransferToMetaEnableEpoch,
-		b.saveNFTToSystemAccountEnableEpoch,
-		b.checkCorrectTokenIDEnableEpoch,
-		b.checkFunctionArgumentEnableEpoch,
 		b.dctStorageHandler,
-		b.epochNotifier,
-	)
+		b.enableEpochsHandler)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTNFTTransfer, newFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	newFunc, err = NewDCTNFTCreateRoleTransfer(b.marshalizer, b.accounts, b.shardCoordinator)
+	newFunc, err = NewDCTNFTCreateRoleTransfer(b.marshaller, b.accounts, b.shardCoordinator)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTNFTCreateRoleTransfer, newFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	newFunc, err = NewDCTNFTUpdateAttributesFunc(b.gasConfig.BuiltInCost.DCTNFTUpdateAttributes, b.gasConfig.BaseOperationCost, b.dctStorageHandler, globalSettingsFunc, setRoleFunc, b.dctNFTImprovementV1ActivationEpoch, b.epochNotifier)
+	newFunc, err = NewDCTNFTUpdateAttributesFunc(b.gasConfig.BuiltInCost.DCTNFTUpdateAttributes, b.gasConfig.BaseOperationCost, b.dctStorageHandler, globalSettingsFunc, setRoleFunc, b.enableEpochsHandler)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTNFTUpdateAttributes, newFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	newFunc, err = NewDCTNFTAddUriFunc(b.gasConfig.BuiltInCost.DCTNFTAddURI, b.gasConfig.BaseOperationCost, b.dctStorageHandler, globalSettingsFunc, setRoleFunc, b.dctNFTImprovementV1ActivationEpoch, b.epochNotifier)
+	newFunc, err = NewDCTNFTAddUriFunc(b.gasConfig.BuiltInCost.DCTNFTAddURI, b.gasConfig.BaseOperationCost, b.dctStorageHandler, globalSettingsFunc, setRoleFunc, b.enableEpochsHandler)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTNFTAddURI, newFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	newFunc, err = NewDCTNFTMultiTransferFunc(
-		b.gasConfig.BuiltInCost.DCTNFTMultiTransfer,
-		b.marshalizer,
+	newFunc, err = NewDCTNFTMultiTransferFunc(b.gasConfig.BuiltInCost.DCTNFTMultiTransfer,
+		b.marshaller,
 		globalSettingsFunc,
 		b.accounts,
 		b.shardCoordinator,
 		b.gasConfig.BaseOperationCost,
-		b.dctNFTImprovementV1ActivationEpoch,
-		b.epochNotifier,
+		b.enableEpochsHandler,
 		setRoleFunc,
-		b.dctTransferToMetaEnableEpoch,
-		b.checkCorrectTokenIDEnableEpoch,
-		b.checkFunctionArgumentEnableEpoch,
-		b.dctStorageHandler,
-	)
+		b.dctStorageHandler)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	err = b.builtInFunctions.Add(core.BuiltInFunctionMultiDCTNFTTransfer, newFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	newFunc, err = NewDCTGlobalSettingsFunc(b.accounts, true, core.BuiltInFunctionDCTSetLimitedTransfer, b.dctTransferRoleEnableEpoch, b.epochNotifier)
+	newFunc, err = NewDCTGlobalSettingsFunc(b.accounts, b.marshaller, true, core.BuiltInFunctionDCTSetLimitedTransfer, b.enableEpochsHandler.IsDCTTransferRoleFlagEnabled)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTSetLimitedTransfer, newFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	newFunc, err = NewDCTGlobalSettingsFunc(b.accounts, false, core.BuiltInFunctionDCTUnSetLimitedTransfer, b.dctTransferRoleEnableEpoch, b.epochNotifier)
+	newFunc, err = NewDCTGlobalSettingsFunc(b.accounts, b.marshaller, false, core.BuiltInFunctionDCTUnSetLimitedTransfer, b.enableEpochsHandler.IsDCTTransferRoleFlagEnabled)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTUnSetLimitedTransfer, newFunc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return b.builtInFunctions, nil
+	argsNewDeleteFunc := ArgsNewDCTDeleteMetadata{
+		FuncGasCost:         b.gasConfig.BuiltInCost.DCTNFTBurn,
+		Marshalizer:         b.marshaller,
+		Accounts:            b.accounts,
+		AllowedAddress:      b.configAddress,
+		Delete:              true,
+		EnableEpochsHandler: b.enableEpochsHandler,
+	}
+	newFunc, err = NewDCTDeleteMetadataFunc(argsNewDeleteFunc)
+	if err != nil {
+		return err
+	}
+	err = b.builtInFunctions.Add(vmcommon.DCTDeleteMetadata, newFunc)
+	if err != nil {
+		return err
+	}
+
+	argsNewDeleteFunc.Delete = false
+	newFunc, err = NewDCTDeleteMetadataFunc(argsNewDeleteFunc)
+	if err != nil {
+		return err
+	}
+	err = b.builtInFunctions.Add(vmcommon.DCTAddMetadata, newFunc)
+	if err != nil {
+		return err
+	}
+
+	newFunc, err = NewDCTGlobalSettingsFunc(b.accounts, b.marshaller, true, vmcommon.BuiltInFunctionDCTSetBurnRoleForAll, b.enableEpochsHandler.IsSendAlwaysFlagEnabled)
+	if err != nil {
+		return err
+	}
+	err = b.builtInFunctions.Add(vmcommon.BuiltInFunctionDCTSetBurnRoleForAll, newFunc)
+	if err != nil {
+		return err
+	}
+
+	newFunc, err = NewDCTGlobalSettingsFunc(b.accounts, b.marshaller, false, vmcommon.BuiltInFunctionDCTUnSetBurnRoleForAll, b.enableEpochsHandler.IsSendAlwaysFlagEnabled)
+	if err != nil {
+		return err
+	}
+	err = b.builtInFunctions.Add(vmcommon.BuiltInFunctionDCTUnSetBurnRoleForAll, newFunc)
+	if err != nil {
+		return err
+	}
+
+	newFunc, err = NewDCTTransferRoleAddressFunc(b.accounts, b.marshaller, b.maxNumOfAddressesForTransferRole, false, b.enableEpochsHandler)
+	if err != nil {
+		return err
+	}
+	err = b.builtInFunctions.Add(vmcommon.BuiltInFunctionDCTTransferRoleDeleteAddress, newFunc)
+	if err != nil {
+		return err
+	}
+
+	newFunc, err = NewDCTTransferRoleAddressFunc(b.accounts, b.marshaller, b.maxNumOfAddressesForTransferRole, true, b.enableEpochsHandler)
+	if err != nil {
+		return err
+	}
+	err = b.builtInFunctions.Add(vmcommon.BuiltInFunctionDCTTransferRoleAddAddress, newFunc)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func createGasConfig(gasMap map[string]map[string]uint64) (*vmcommon.GasCost, error) {
@@ -430,25 +468,33 @@ func createGasConfig(gasMap map[string]map[string]uint64) (*vmcommon.GasCost, er
 	return &gasCost, nil
 }
 
-// SetPayableHandler sets the payable interface to the needed functions
-func SetPayableHandler(container vmcommon.BuiltInFunctionContainer, payableHandler vmcommon.PayableHandler) error {
+// SetPayableHandler sets the payableCheck interface to the needed functions
+func (b *builtInFuncCreator) SetPayableHandler(payableHandler vmcommon.PayableHandler) error {
+	payableChecker, err := NewPayableCheckFunc(
+		payableHandler,
+		b.enableEpochsHandler,
+	)
+	if err != nil {
+		return err
+	}
+
 	listOfTransferFunc := []string{
 		core.BuiltInFunctionMultiDCTNFTTransfer,
 		core.BuiltInFunctionDCTNFTTransfer,
 		core.BuiltInFunctionDCTTransfer}
 
 	for _, transferFunc := range listOfTransferFunc {
-		builtInFunc, err := container.Get(transferFunc)
+		builtInFunc, err := b.builtInFunctions.Get(transferFunc)
 		if err != nil {
 			return err
 		}
 
-		dctTransferFunc, ok := builtInFunc.(vmcommon.AcceptPayableHandler)
+		dctTransferFunc, ok := builtInFunc.(vmcommon.AcceptPayableChecker)
 		if !ok {
 			return ErrWrongTypeAssertion
 		}
 
-		err = dctTransferFunc.SetPayableHandler(payableHandler)
+		err = dctTransferFunc.SetPayableChecker(payableChecker)
 		if err != nil {
 			return err
 		}
