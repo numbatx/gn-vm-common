@@ -9,13 +9,14 @@ import (
 	vmcommon "github.com/numbatx/gn-vm-common"
 	"github.com/numbatx/gn-vm-common/mock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDCTFreezeWipe_ProcessBuiltInFunctionErrors(t *testing.T) {
 	t.Parallel()
 
 	marshaller := &mock.MarshalizerMock{}
-	freeze, _ := NewDCTFreezeWipeFunc(marshaller, true, false)
+	freeze, _ := NewDCTFreezeWipeFunc(createNewDCTDataStorageHandler(), &mock.EnableEpochsHandlerStub{}, marshaller, true, false)
 	_, err := freeze.ProcessBuiltinFunction(nil, nil, nil)
 	assert.Equal(t, err, ErrNilVmInput)
 
@@ -74,7 +75,7 @@ func TestDCTFreezeWipe_ProcessBuiltInFunction(t *testing.T) {
 	t.Parallel()
 
 	marshaller := &mock.MarshalizerMock{}
-	freeze, _ := NewDCTFreezeWipeFunc(marshaller, true, false)
+	freeze, _ := NewDCTFreezeWipeFunc(createNewDCTDataStorageHandler(), &mock.EnableEpochsHandlerStub{}, marshaller, true, false)
 	_, err := freeze.ProcessBuiltinFunction(nil, nil, nil)
 	assert.Equal(t, err, ErrNilVmInput)
 
@@ -104,7 +105,7 @@ func TestDCTFreezeWipe_ProcessBuiltInFunction(t *testing.T) {
 	dctUserData := DCTUserMetadataFromBytes(dctToken.Properties)
 	assert.True(t, dctUserData.Frozen)
 
-	unFreeze, _ := NewDCTFreezeWipeFunc(marshaller, false, false)
+	unFreeze, _ := NewDCTFreezeWipeFunc(createNewDCTDataStorageHandler(), &mock.EnableEpochsHandlerStub{}, marshaller, false, false)
 	_, err = unFreeze.ProcessBuiltinFunction(nil, acnt, input)
 	assert.Nil(t, err)
 
@@ -115,7 +116,7 @@ func TestDCTFreezeWipe_ProcessBuiltInFunction(t *testing.T) {
 	assert.False(t, dctUserData.Frozen)
 
 	// cannot wipe if account is not frozen
-	wipe, _ := NewDCTFreezeWipeFunc(marshaller, false, true)
+	wipe, _ := NewDCTFreezeWipeFunc(createNewDCTDataStorageHandler(), &mock.EnableEpochsHandlerStub{}, marshaller, false, true)
 	_, err = wipe.ProcessBuiltinFunction(nil, acnt, input)
 	assert.Equal(t, ErrCannotWipeAccountNotFrozen, err)
 
@@ -133,7 +134,7 @@ func TestDCTFreezeWipe_ProcessBuiltInFunction(t *testing.T) {
 	err = acnt.AccountDataHandler().SaveKeyValue(dctKey, dctTokenBytes)
 	assert.NoError(t, err)
 
-	wipe, _ = NewDCTFreezeWipeFunc(marshaller, false, true)
+	wipe, _ = NewDCTFreezeWipeFunc(createNewDCTDataStorageHandler(), &mock.EnableEpochsHandlerStub{}, marshaller, false, true)
 	vmOutput, err := wipe.ProcessBuiltinFunction(nil, acnt, input)
 	assert.NoError(t, err)
 
@@ -141,4 +142,64 @@ func TestDCTFreezeWipe_ProcessBuiltInFunction(t *testing.T) {
 	assert.Equal(t, 0, len(marshaledData))
 	assert.Len(t, vmOutput.Logs, 1)
 	assert.Equal(t, [][]byte{key, {}, wipedAmount.Bytes(), []byte("dst")}, vmOutput.Logs[0].Topics)
+}
+
+func TestDctFreezeWipe_WipeShouldDecreaseLiquidityIfFlagIsEnabled(t *testing.T) {
+	t.Parallel()
+
+	balance := big.NewInt(37)
+	addToLiquiditySystemAccCalled := false
+	dctStorage := &mock.DCTNFTStorageHandlerStub{
+		AddToLiquiditySystemAccCalled: func(_ []byte, _ uint64, transferValue *big.Int) error {
+			require.Equal(t, big.NewInt(0).Neg(balance), transferValue)
+			addToLiquiditySystemAccCalled = true
+			return nil
+		},
+	}
+
+	marshaller := &mock.MarshalizerMock{}
+	wipe, _ := NewDCTFreezeWipeFunc(dctStorage, &mock.EnableEpochsHandlerStub{}, marshaller, false, true)
+
+	acnt := mock.NewUserAccount([]byte("dst"))
+	metaData := DCTUserMetadata{Frozen: true}
+	dctToken := &dct.DCToken{
+		Value:      balance,
+		Properties: metaData.ToBytes(),
+	}
+	dctTokenBytes, _ := marshaller.Marshal(dctToken)
+
+	nonce := uint64(37)
+	key := append([]byte("MYSFT-0a0a0a"), big.NewInt(int64(nonce)).Bytes()...)
+	dctKey := append(wipe.keyPrefix, key...)
+
+	err := acnt.AccountDataHandler().SaveKeyValue(dctKey, dctTokenBytes)
+	assert.NoError(t, err)
+
+	input := &vmcommon.ContractCallInput{
+		VMInput: vmcommon.VMInput{
+			CallValue: big.NewInt(0),
+		},
+	}
+	input.Arguments = [][]byte{key}
+	input.CallerAddr = core.DCTSCAddress
+	input.RecipientAddr = []byte("dst")
+
+	acntCopy := acnt.Clone()
+	_, err = wipe.ProcessBuiltinFunction(nil, acntCopy, input)
+	assert.NoError(t, err)
+
+	marshaledData, _, _ := acntCopy.AccountDataHandler().RetrieveValue(dctKey)
+	assert.Equal(t, 0, len(marshaledData))
+	assert.False(t, addToLiquiditySystemAccCalled)
+
+	wipe.enableEpochsHandler = &mock.EnableEpochsHandlerStub{
+		IsWipeSingleNFTLiquidityDecreaseEnabledField: true,
+	}
+
+	_, err = wipe.ProcessBuiltinFunction(nil, acnt, input)
+	assert.NoError(t, err)
+
+	marshaledData, _, _ = acnt.AccountDataHandler().RetrieveValue(dctKey)
+	assert.Equal(t, 0, len(marshaledData))
+	assert.True(t, addToLiquiditySystemAccCalled)
 }

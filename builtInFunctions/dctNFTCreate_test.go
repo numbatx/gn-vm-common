@@ -344,7 +344,7 @@ func TestDctNFTCreate_ProcessBuiltinFunctionShouldWork(t *testing.T) {
 	tokenKey := []byte(baseDCTKeyPrefix + token)
 	tokenKey = append(tokenKey, big.NewInt(1).Bytes()...)
 
-	dctData, _, _ := dctDataStorage.getDCTDigitalTokenDataFromSystemAccount(tokenKey)
+	dctData, _, _ := dctDataStorage.getDCTDigitalTokenDataFromSystemAccount(tokenKey, defaultQueryOptions())
 	assert.Equal(t, tokenMetaData, dctData.TokenMetaData)
 	assert.Equal(t, dctData.Value, quantity)
 
@@ -429,7 +429,7 @@ func TestDctNFTCreate_ProcessBuiltinFunctionWithExecByCaller(t *testing.T) {
 	tokenKey := []byte(baseDCTKeyPrefix + token)
 	tokenKey = append(tokenKey, big.NewInt(1).Bytes()...)
 
-	metaData, _ := dctDataStorage.getDCTMetaDataFromSystemAccount(tokenKey)
+	metaData, _ := dctDataStorage.getDCTMetaDataFromSystemAccount(tokenKey, defaultQueryOptions())
 	assert.Equal(t, tokenMetaData, metaData)
 }
 

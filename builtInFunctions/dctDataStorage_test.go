@@ -151,7 +151,7 @@ func TestDctDataStorage_GetDCTNFTTokenOnDestinationGetDataFromSystemAcc(t *testi
 	tokenKey := append([]byte(key), big.NewInt(int64(nonce)).Bytes()...)
 	_ = userAcc.AccountDataHandler().SaveKeyValue(tokenKey, dctDataBytes)
 
-	systemAcc, _ := e.getSystemAccount()
+	systemAcc, _ := e.getSystemAccount(defaultQueryOptions())
 	metaData := &dct.MetaData{
 		Name: []byte("test"),
 	}
@@ -163,6 +163,50 @@ func TestDctDataStorage_GetDCTNFTTokenOnDestinationGetDataFromSystemAcc(t *testi
 	assert.Nil(t, err)
 	dctData.TokenMetaData = metaData
 	assert.Equal(t, dctData, dctDataGet)
+}
+
+func TestDctDataStorage_GetDCTNFTTokenOnDestinationWithCustomSystemAccount(t *testing.T) {
+	t.Parallel()
+
+	args := createMockArgsForNewDCTDataStorage()
+	e, _ := NewDCTDataStorage(args)
+
+	userAcc := mock.NewAccountWrapMock([]byte("addr"))
+	dctData := &dct.DCToken{
+		Value: big.NewInt(10),
+	}
+
+	tokenIdentifier := "testTkn"
+	key := baseDCTKeyPrefix + tokenIdentifier
+	nonce := uint64(10)
+	dctDataBytes, _ := args.Marshalizer.Marshal(dctData)
+	tokenKey := append([]byte(key), big.NewInt(int64(nonce)).Bytes()...)
+	_ = userAcc.AccountDataHandler().SaveKeyValue(tokenKey, dctDataBytes)
+
+	systemAcc, _ := e.getSystemAccount(defaultQueryOptions())
+	metaData := &dct.MetaData{
+		Name: []byte("test"),
+	}
+	dctDataOnSystemAcc := &dct.DCToken{TokenMetaData: metaData}
+	dctMetaDataBytes, _ := args.Marshalizer.Marshal(dctDataOnSystemAcc)
+	_ = systemAcc.AccountDataHandler().SaveKeyValue(tokenKey, dctMetaDataBytes)
+
+	retrieveValueFromCustomAccountCalled := false
+	customSystemAccount := &mock.UserAccountStub{
+		AccountDataHandlerCalled: func() vmcommon.AccountDataHandler {
+			return &mock.DataTrieTrackerStub{
+				RetrieveValueCalled: func(key []byte) ([]byte, uint32, error) {
+					retrieveValueFromCustomAccountCalled = true
+					return dctMetaDataBytes, 0, nil
+				},
+			}
+		},
+	}
+	dctDataGet, _, err := e.GetDCTNFTTokenOnDestinationWithCustomSystemAccount(userAcc, []byte(key), nonce, customSystemAccount)
+	assert.Nil(t, err)
+	dctData.TokenMetaData = metaData
+	assert.Equal(t, dctData, dctDataGet)
+	assert.True(t, retrieveValueFromCustomAccountCalled)
 }
 
 func TestDctDataStorage_GetDCTNFTTokenOnDestinationMarshalERR(t *testing.T) {
@@ -212,7 +256,7 @@ func TestDctDataStorage_MarshalErrorOnSystemACC(t *testing.T) {
 	tokenKey := append([]byte(key), big.NewInt(int64(nonce)).Bytes()...)
 	_ = userAcc.AccountDataHandler().SaveKeyValue(tokenKey, dctDataBytes)
 
-	systemAcc, _ := e.getSystemAccount()
+	systemAcc, _ := e.getSystemAccount(defaultQueryOptions())
 	metaData := &dct.MetaData{
 		Name: []byte("test"),
 	}
@@ -256,7 +300,7 @@ func TestDctDataStorage_SaveDCTNFTTokenNoChangeInSystemAcc(t *testing.T) {
 	tokenKey := append([]byte(key), big.NewInt(int64(nonce)).Bytes()...)
 	_ = userAcc.AccountDataHandler().SaveKeyValue(tokenKey, dctDataBytes)
 
-	systemAcc, _ := e.getSystemAccount()
+	systemAcc, _ := e.getSystemAccount(defaultQueryOptions())
 	metaData := &dct.MetaData{
 		Name: []byte("test"),
 	}
@@ -306,7 +350,7 @@ func TestDctDataStorage_SaveDCTNFTTokenWhenQuantityZero(t *testing.T) {
 	assert.Nil(t, val)
 	assert.Nil(t, err)
 
-	dctMetaData, err := e.getDCTMetaDataFromSystemAccount(tokenKey)
+	dctMetaData, err := e.getDCTMetaDataFromSystemAccount(tokenKey, defaultQueryOptions())
 	assert.Nil(t, err)
 	assert.Equal(t, dctData.TokenMetaData, dctMetaData)
 }
@@ -350,7 +394,7 @@ func TestDctDataStorage_WasAlreadySentToDestinationShard(t *testing.T) {
 	assert.False(t, val)
 	assert.Nil(t, err)
 
-	systemAcc, _ := e.getSystemAccount()
+	systemAcc, _ := e.getSystemAccount(defaultQueryOptions())
 	metaData := &dct.MetaData{
 		Name: []byte("test"),
 	}
@@ -459,7 +503,7 @@ func TestDctDataStorage_SaveNFTMetaDataToSystemAccount(t *testing.T) {
 
 	key := baseDCTKeyPrefix + string(tickerID)
 	tokenKey := append([]byte(key), big.NewInt(1).Bytes()...)
-	dctGetData, _, _ := e.getDCTDigitalTokenDataFromSystemAccount(tokenKey)
+	dctGetData, _, _ := e.getDCTDigitalTokenDataFromSystemAccount(tokenKey, defaultQueryOptions())
 
 	assert.Equal(t, dctData.TokenMetaData, dctGetData.TokenMetaData)
 }
@@ -519,12 +563,12 @@ func TestDctDataStorage_SaveNFTMetaDataToSystemAccountWithMultiTransfer(t *testi
 
 	key := baseDCTKeyPrefix + string(tickerID)
 	tokenKey := append([]byte(key), big.NewInt(1).Bytes()...)
-	dctGetData, _, _ := e.getDCTDigitalTokenDataFromSystemAccount(tokenKey)
+	dctGetData, _, _ := e.getDCTDigitalTokenDataFromSystemAccount(tokenKey, defaultQueryOptions())
 
 	assert.Equal(t, dctData.TokenMetaData, dctGetData.TokenMetaData)
 
 	otherTokenKey := append([]byte(key), big.NewInt(2).Bytes()...)
-	dctGetData, _, err = e.getDCTDigitalTokenDataFromSystemAccount(otherTokenKey)
+	dctGetData, _, err = e.getDCTDigitalTokenDataFromSystemAccount(otherTokenKey, defaultQueryOptions())
 	assert.Nil(t, dctGetData)
 	assert.Nil(t, err)
 }
@@ -587,7 +631,7 @@ func TestDctDataStorage_AddToLiquiditySystemAcc(t *testing.T) {
 	err := e.AddToLiquiditySystemAcc(tokenKey, nonce, big.NewInt(10))
 	assert.Equal(t, err, ErrNilDCTData)
 
-	systemAcc, _ := e.getSystemAccount()
+	systemAcc, _ := e.getSystemAccount(defaultQueryOptions())
 	dctData := &dct.DCToken{Value: big.NewInt(0)}
 	marshalledData, _ := e.marshaller.Marshal(dctData)
 
@@ -604,12 +648,12 @@ func TestDctDataStorage_AddToLiquiditySystemAcc(t *testing.T) {
 	err = e.AddToLiquiditySystemAcc(tokenKey, nonce, big.NewInt(10))
 	assert.Nil(t, err)
 
-	dctData, _, _ = e.getDCTDigitalTokenDataFromSystemAccount(dctNFTTokenKey)
+	dctData, _, _ = e.getDCTDigitalTokenDataFromSystemAccount(dctNFTTokenKey, defaultQueryOptions())
 	assert.Equal(t, dctData.Value, big.NewInt(20))
 
 	err = e.AddToLiquiditySystemAcc(tokenKey, nonce, big.NewInt(-20))
 	assert.Nil(t, err)
 
-	dctData, _, _ = e.getDCTDigitalTokenDataFromSystemAccount(dctNFTTokenKey)
+	dctData, _, _ = e.getDCTDigitalTokenDataFromSystemAccount(dctNFTTokenKey, defaultQueryOptions())
 	assert.Nil(t, dctData)
 }
