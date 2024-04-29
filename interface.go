@@ -288,6 +288,7 @@ type DCTNFTStorageHandler interface {
 	SaveDCTNFTToken(senderAddress []byte, acnt UserAccountHandler, dctTokenKey []byte, nonce uint64, dctData *dct.DCToken, isCreation bool, isReturnWithError bool) ([]byte, error)
 	GetDCTNFTTokenOnSender(acnt UserAccountHandler, dctTokenKey []byte, nonce uint64) (*dct.DCToken, error)
 	GetDCTNFTTokenOnDestination(acnt UserAccountHandler, dctTokenKey []byte, nonce uint64) (*dct.DCToken, bool, error)
+	GetDCTNFTTokenOnDestinationWithCustomSystemAccount(accnt UserAccountHandler, dctTokenKey []byte, nonce uint64, systemAccount UserAccountHandler) (*dct.DCToken, bool, error)
 	WasAlreadySentToDestinationShardAndUpdateState(tickerID []byte, nonce uint64, dstAddress []byte) (bool, error)
 	SaveNFTMetaDataToSystemAccount(tx data.TransactionHandler) error
 	AddToLiquiditySystemAcc(dctTokenKey []byte, nonce uint64, transferValue *big.Int) error
@@ -361,6 +362,7 @@ type EnableEpochsHandler interface {
 	IsDCTNFTImprovementV1FlagEnabled() bool
 	IsFixOldTokenLiquidityEnabled() bool
 	IsRuntimeMemStoreLimitEnabled() bool
+	IsWipeSingleNFTLiquidityDecreaseEnabled() bool
 
 	MultiDCTTransferAsyncCallBackEnableEpoch() uint32
 	FixOOGReturnCodeEnableEpoch() uint32

@@ -190,33 +190,6 @@ func (b *builtInFuncCreator) CreateBuiltInFunctionContainer() error {
 		return err
 	}
 
-	newFunc, err = NewDCTFreezeWipeFunc(b.marshaller, true, false)
-	if err != nil {
-		return err
-	}
-	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTFreeze, newFunc)
-	if err != nil {
-		return err
-	}
-
-	newFunc, err = NewDCTFreezeWipeFunc(b.marshaller, false, false)
-	if err != nil {
-		return err
-	}
-	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTUnFreeze, newFunc)
-	if err != nil {
-		return err
-	}
-
-	newFunc, err = NewDCTFreezeWipeFunc(b.marshaller, false, true)
-	if err != nil {
-		return err
-	}
-	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTWipe, newFunc)
-	if err != nil {
-		return err
-	}
-
 	newFunc, err = NewDCTGlobalSettingsFunc(b.accounts, b.marshaller, false, core.BuiltInFunctionDCTUnPause, trueHandler)
 	if err != nil {
 		return err
@@ -288,6 +261,33 @@ func (b *builtInFuncCreator) CreateBuiltInFunctionContainer() error {
 		return err
 	}
 	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTNFTCreate, newFunc)
+	if err != nil {
+		return err
+	}
+
+	newFunc, err = NewDCTFreezeWipeFunc(b.dctStorageHandler, b.enableEpochsHandler, b.marshaller, true, false)
+	if err != nil {
+		return err
+	}
+	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTFreeze, newFunc)
+	if err != nil {
+		return err
+	}
+
+	newFunc, err = NewDCTFreezeWipeFunc(b.dctStorageHandler, b.enableEpochsHandler, b.marshaller, false, false)
+	if err != nil {
+		return err
+	}
+	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTUnFreeze, newFunc)
+	if err != nil {
+		return err
+	}
+
+	newFunc, err = NewDCTFreezeWipeFunc(b.dctStorageHandler, b.enableEpochsHandler, b.marshaller, false, true)
+	if err != nil {
+		return err
+	}
+	err = b.builtInFunctions.Add(core.BuiltInFunctionDCTWipe, newFunc)
 	if err != nil {
 		return err
 	}

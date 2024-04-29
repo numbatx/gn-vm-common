@@ -15,6 +15,15 @@ import (
 
 const existsOnShard = byte(1)
 
+type queryOptions struct {
+	isCustomSystemAccountSet bool
+	customSystemAccount      vmcommon.UserAccountHandler
+}
+
+func defaultQueryOptions() queryOptions {
+	return queryOptions{}
+}
+
 type dctDataStorage struct {
 	accounts              vmcommon.AccountsAdapter
 	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler
@@ -88,6 +97,34 @@ func (e *dctDataStorage) GetDCTNFTTokenOnDestination(
 	dctTokenKey []byte,
 	nonce uint64,
 ) (*dct.DCToken, bool, error) {
+	return e.getDCTNFTTokenOnDestinationWithAccountsAdapterOptions(accnt, dctTokenKey, nonce, defaultQueryOptions())
+}
+
+// GetDCTNFTTokenOnDestinationWithCustomSystemAccount gets the nft token on destination account by using a custom system account
+func (e *dctDataStorage) GetDCTNFTTokenOnDestinationWithCustomSystemAccount(
+	accnt vmcommon.UserAccountHandler,
+	dctTokenKey []byte,
+	nonce uint64,
+	customSystemAccount vmcommon.UserAccountHandler,
+) (*dct.DCToken, bool, error) {
+	if check.IfNil(customSystemAccount) {
+		return nil, false, ErrNilUserAccount
+	}
+
+	queryOpts := queryOptions{
+		isCustomSystemAccountSet: true,
+		customSystemAccount:      customSystemAccount,
+	}
+
+	return e.getDCTNFTTokenOnDestinationWithAccountsAdapterOptions(accnt, dctTokenKey, nonce, queryOpts)
+}
+
+func (e *dctDataStorage) getDCTNFTTokenOnDestinationWithAccountsAdapterOptions(
+	accnt vmcommon.UserAccountHandler,
+	dctTokenKey []byte,
+	nonce uint64,
+	options queryOptions,
+) (*dct.DCToken, bool, error) {
 	dctNFTTokenKey := computeDCTNFTTokenKey(dctTokenKey, nonce)
 	dctData := &dct.DCToken{
 		Value: big.NewInt(0),
@@ -107,7 +144,7 @@ func (e *dctDataStorage) GetDCTNFTTokenOnDestination(
 		return dctData, false, nil
 	}
 
-	dctMetaData, err := e.getDCTMetaDataFromSystemAccount(dctNFTTokenKey)
+	dctMetaData, err := e.getDCTMetaDataFromSystemAccount(dctNFTTokenKey, options)
 	if err != nil {
 		return nil, false, err
 	}
@@ -120,8 +157,9 @@ func (e *dctDataStorage) GetDCTNFTTokenOnDestination(
 
 func (e *dctDataStorage) getDCTDigitalTokenDataFromSystemAccount(
 	tokenKey []byte,
+	options queryOptions,
 ) (*dct.DCToken, vmcommon.UserAccountHandler, error) {
-	systemAcc, err := e.getSystemAccount()
+	systemAcc, err := e.getSystemAccount(options)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -142,8 +180,9 @@ func (e *dctDataStorage) getDCTDigitalTokenDataFromSystemAccount(
 
 func (e *dctDataStorage) getDCTMetaDataFromSystemAccount(
 	tokenKey []byte,
+	options queryOptions,
 ) (*dct.MetaData, error) {
-	dctData, _, err := e.getDCTDigitalTokenDataFromSystemAccount(tokenKey)
+	dctData, _, err := e.getDCTDigitalTokenDataFromSystemAccount(tokenKey, options)
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +268,7 @@ func (e *dctDataStorage) AddToLiquiditySystemAcc(
 	}
 
 	dctNFTTokenKey := computeDCTNFTTokenKey(dctTokenKey, nonce)
-	dctData, systemAcc, err := e.getDCTDigitalTokenDataFromSystemAccount(dctNFTTokenKey)
+	dctData, systemAcc, err := e.getDCTDigitalTokenDataFromSystemAccount(dctNFTTokenKey, defaultQueryOptions())
 	if err != nil {
 		return err
 	}
@@ -338,7 +377,7 @@ func (e *dctDataStorage) saveDCTMetaDataToSystemAccount(
 		return nil
 	}
 
-	systemAcc, err := e.getSystemAccount()
+	systemAcc, err := e.getSystemAccount(defaultQueryOptions())
 	if err != nil {
 		return err
 	}
@@ -429,7 +468,15 @@ func (e *dctDataStorage) marshalAndSaveData(
 	return e.accounts.SaveAccount(systemAcc)
 }
 
-func (e *dctDataStorage) getSystemAccount() (vmcommon.UserAccountHandler, error) {
+func (e *dctDataStorage) getSystemAccount(options queryOptions) (vmcommon.UserAccountHandler, error) {
+	if options.isCustomSystemAccountSet && !check.IfNil(options.customSystemAccount) {
+		return options.customSystemAccount, nil
+	}
+
+	return e.loadSystemAccount()
+}
+
+func (e *dctDataStorage) loadSystemAccount() (vmcommon.UserAccountHandler, error) {
 	systemSCAccount, err := e.accounts.LoadAccount(vmcommon.SystemAccountAddress)
 	if err != nil {
 		return nil, err
@@ -474,7 +521,7 @@ func (e *dctDataStorage) WasAlreadySentToDestinationShardAndUpdateState(
 	dctTokenKey := append(e.keyPrefix, tickerID...)
 	dctNFTTokenKey := computeDCTNFTTokenKey(dctTokenKey, nonce)
 
-	dctData, systemAcc, err := e.getDCTDigitalTokenDataFromSystemAccount(dctNFTTokenKey)
+	dctData, systemAcc, err := e.getDCTDigitalTokenDataFromSystemAccount(dctNFTTokenKey, defaultQueryOptions())
 	if err != nil {
 		return false, err
 	}

@@ -395,6 +395,6 @@ func TestDCTNFTUpdateAttributes_ProcessBuiltinFunctionShouldWork(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, res)
 
-	metaData, _ := dctDataStorage.getDCTMetaDataFromSystemAccount(tokenKey)
+	metaData, _ := dctDataStorage.getDCTMetaDataFromSystemAccount(tokenKey, defaultQueryOptions())
 	require.Equal(t, metaData.Attributes, newAttributes)
 }

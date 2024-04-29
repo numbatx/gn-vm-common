@@ -11,14 +11,18 @@ import (
 
 type dctFreezeWipe struct {
 	baseAlwaysActiveHandler
-	marshaller vmcommon.Marshalizer
-	keyPrefix  []byte
-	wipe       bool
-	freeze     bool
+	dctStorageHandler  vmcommon.DCTNFTStorageHandler
+	enableEpochsHandler vmcommon.EnableEpochsHandler
+	marshaller          vmcommon.Marshalizer
+	keyPrefix           []byte
+	wipe                bool
+	freeze              bool
 }
 
 // NewDCTFreezeWipeFunc returns the dct freeze/un-freeze/wipe built-in function component
 func NewDCTFreezeWipeFunc(
+	dctStorageHandler vmcommon.DCTNFTStorageHandler,
+	enableEpochsHandler vmcommon.EnableEpochsHandler,
 	marshaller vmcommon.Marshalizer,
 	freeze bool,
 	wipe bool,
@@ -26,12 +30,20 @@ func NewDCTFreezeWipeFunc(
 	if check.IfNil(marshaller) {
 		return nil, ErrNilMarshalizer
 	}
+	if check.IfNil(dctStorageHandler) {
+		return nil, ErrNilDCTNFTStorageHandler
+	}
+	if check.IfNil(enableEpochsHandler) {
+		return nil, ErrNilEnableEpochsHandler
+	}
 
 	e := &dctFreezeWipe{
-		marshaller: marshaller,
-		keyPrefix:  []byte(baseDCTKeyPrefix),
-		freeze:     freeze,
-		wipe:       wipe,
+		dctStorageHandler:  dctStorageHandler,
+		enableEpochsHandler: enableEpochsHandler,
+		marshaller:          marshaller,
+		keyPrefix:           []byte(baseDCTKeyPrefix),
+		freeze:              freeze,
+		wipe:                wipe,
 	}
 
 	return e, nil
@@ -63,12 +75,13 @@ func (e *dctFreezeWipe) ProcessBuiltinFunction(
 	}
 
 	dctTokenKey := append(e.keyPrefix, vmInput.Arguments[0]...)
+	identifier, nonce := extractTokenIdentifierAndNonceDCTWipe(vmInput.Arguments[0])
 
 	var amount *big.Int
 	var err error
 
 	if e.wipe {
-		amount, err = e.wipeIfApplicable(acntDst, dctTokenKey)
+		amount, err = e.wipeIfApplicable(acntDst, dctTokenKey, identifier, nonce)
 		if err != nil {
 			return nil, err
 		}
@@ -81,13 +94,12 @@ func (e *dctFreezeWipe) ProcessBuiltinFunction(
 	}
 
 	vmOutput := &vmcommon.VMOutput{ReturnCode: vmcommon.Ok}
-	identifier, nonce := extractTokenIdentifierAndNonceDCTWipe(vmInput.Arguments[0])
 	addDCTEntryInVMOutput(vmOutput, []byte(vmInput.Function), identifier, nonce, amount, vmInput.CallerAddr, acntDst.AddressBytes())
 
 	return vmOutput, nil
 }
 
-func (e *dctFreezeWipe) wipeIfApplicable(acntDst vmcommon.UserAccountHandler, tokenKey []byte) (*big.Int, error) {
+func (e *dctFreezeWipe) wipeIfApplicable(acntDst vmcommon.UserAccountHandler, tokenKey []byte, identifier []byte, nonce uint64) (*big.Int, error) {
 	tokenData, err := getDCTDataFromKey(acntDst, tokenKey, e.marshaller)
 	if err != nil {
 		return nil, err
@@ -103,8 +115,22 @@ func (e *dctFreezeWipe) wipeIfApplicable(acntDst vmcommon.UserAccountHandler, to
 		return nil, err
 	}
 
+	err = e.removeLiquidity(identifier, nonce, tokenData.Value)
+	if err != nil {
+		return nil, err
+	}
+
 	wipedAmount := vmcommon.ZeroValueIfNil(tokenData.Value)
 	return wipedAmount, nil
+}
+
+func (e *dctFreezeWipe) removeLiquidity(tokenIdentifier []byte, nonce uint64, value *big.Int) error {
+	if !e.enableEpochsHandler.IsWipeSingleNFTLiquidityDecreaseEnabled() {
+		return nil
+	}
+
+	tokenIDKey := append(e.keyPrefix, tokenIdentifier...)
+	return e.dctStorageHandler.AddToLiquiditySystemAcc(tokenIDKey, nonce, big.NewInt(0).Neg(value))
 }
 
 func (e *dctFreezeWipe) toggleFreeze(acntDst vmcommon.UserAccountHandler, tokenKey []byte) (*big.Int, error) {
