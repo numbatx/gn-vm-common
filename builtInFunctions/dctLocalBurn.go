@@ -11,10 +11,10 @@ import (
 )
 
 type dctLocalBurn struct {
-	baseAlwaysActive
+	baseAlwaysActiveHandler
 	keyPrefix             []byte
-	marshalizer           vmcommon.Marshalizer
-	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler
+	marshaller            vmcommon.Marshalizer
+	globalSettingsHandler vmcommon.ExtendedDCTGlobalSettingsHandler
 	rolesHandler          vmcommon.DCTRoleHandler
 	funcGasCost           uint64
 	mutExecution          sync.RWMutex
@@ -23,11 +23,11 @@ type dctLocalBurn struct {
 // NewDCTLocalBurnFunc returns the dct local burn built-in function component
 func NewDCTLocalBurnFunc(
 	funcGasCost uint64,
-	marshalizer vmcommon.Marshalizer,
-	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler,
+	marshaller vmcommon.Marshalizer,
+	globalSettingsHandler vmcommon.ExtendedDCTGlobalSettingsHandler,
 	rolesHandler vmcommon.DCTRoleHandler,
 ) (*dctLocalBurn, error) {
-	if check.IfNil(marshalizer) {
+	if check.IfNil(marshaller) {
 		return nil, ErrNilMarshalizer
 	}
 	if check.IfNil(globalSettingsHandler) {
@@ -38,8 +38,8 @@ func NewDCTLocalBurnFunc(
 	}
 
 	e := &dctLocalBurn{
-		keyPrefix:             []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
-		marshalizer:           marshalizer,
+		keyPrefix:             []byte(baseDCTKeyPrefix),
+		marshaller:            marshaller,
 		globalSettingsHandler: globalSettingsHandler,
 		rolesHandler:          rolesHandler,
 		funcGasCost:           funcGasCost,
@@ -74,14 +74,14 @@ func (e *dctLocalBurn) ProcessBuiltinFunction(
 	}
 
 	tokenID := vmInput.Arguments[0]
-	err = e.rolesHandler.CheckAllowedToExecute(acntSnd, tokenID, []byte(core.DCTRoleLocalBurn))
+	err = e.isAllowedToBurn(acntSnd, tokenID)
 	if err != nil {
 		return nil, err
 	}
 
 	value := big.NewInt(0).SetBytes(vmInput.Arguments[1])
 	dctTokenKey := append(e.keyPrefix, tokenID...)
-	err = addToDCTBalance(acntSnd, dctTokenKey, big.NewInt(0).Neg(value), e.marshalizer, e.globalSettingsHandler, vmInput.ReturnCallAfterError)
+	err = addToDCTBalance(acntSnd, dctTokenKey, big.NewInt(0).Neg(value), e.marshaller, e.globalSettingsHandler, vmInput.ReturnCallAfterError)
 	if err != nil {
 		return nil, err
 	}
@@ -91,6 +91,16 @@ func (e *dctLocalBurn) ProcessBuiltinFunction(
 	addDCTEntryInVMOutput(vmOutput, []byte(core.BuiltInFunctionDCTLocalBurn), vmInput.Arguments[0], 0, value, vmInput.CallerAddr)
 
 	return vmOutput, nil
+}
+
+func (e *dctLocalBurn) isAllowedToBurn(acntSnd vmcommon.UserAccountHandler, tokenID []byte) error {
+	dctTokenKey := append(e.keyPrefix, tokenID...)
+	isBurnForAll := e.globalSettingsHandler.IsBurnForAll(dctTokenKey)
+	if isBurnForAll {
+		return nil
+	}
+
+	return e.rolesHandler.CheckAllowedToExecute(acntSnd, tokenID, []byte(core.DCTRoleLocalBurn))
 }
 
 // IsInterfaceNil returns true if underlying object in nil

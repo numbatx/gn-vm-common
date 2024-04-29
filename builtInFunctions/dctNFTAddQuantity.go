@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/numbatx/gn-core/core"
-	"github.com/numbatx/gn-core/core/atomic"
 	"github.com/numbatx/gn-core/core/check"
 	"github.com/numbatx/gn-vm-common"
 )
@@ -14,16 +13,14 @@ import (
 const maxLenForAddNFTQuantity = 32
 
 type dctNFTAddQuantity struct {
-	baseAlwaysActive
+	baseAlwaysActiveHandler
 	keyPrefix             []byte
 	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler
 	rolesHandler          vmcommon.DCTRoleHandler
 	dctStorageHandler    vmcommon.DCTNFTStorageHandler
+	enableEpochsHandler   vmcommon.EnableEpochsHandler
 	funcGasCost           uint64
 	mutExecution          sync.RWMutex
-
-	valueLengthCheckEnableEpoch uint32
-	flagValueLengthCheck        atomic.Flag
 }
 
 // NewDCTNFTAddQuantityFunc returns the dct NFT add quantity built-in function component
@@ -32,8 +29,7 @@ func NewDCTNFTAddQuantityFunc(
 	dctStorageHandler vmcommon.DCTNFTStorageHandler,
 	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler,
 	rolesHandler vmcommon.DCTRoleHandler,
-	valueLengthCheckEnableEpoch uint32,
-	epochNotifier vmcommon.EpochNotifier,
+	enableEpochsHandler vmcommon.EnableEpochsHandler,
 ) (*dctNFTAddQuantity, error) {
 	if check.IfNil(dctStorageHandler) {
 		return nil, ErrNilDCTNFTStorageHandler
@@ -44,29 +40,21 @@ func NewDCTNFTAddQuantityFunc(
 	if check.IfNil(rolesHandler) {
 		return nil, ErrNilRolesHandler
 	}
-	if check.IfNil(epochNotifier) {
-		return nil, ErrNilEpochHandler
+	if check.IfNil(enableEpochsHandler) {
+		return nil, ErrNilEnableEpochsHandler
 	}
 
 	e := &dctNFTAddQuantity{
-		keyPrefix:                   []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
-		globalSettingsHandler:       globalSettingsHandler,
-		rolesHandler:                rolesHandler,
-		funcGasCost:                 funcGasCost,
-		mutExecution:                sync.RWMutex{},
-		dctStorageHandler:          dctStorageHandler,
-		valueLengthCheckEnableEpoch: valueLengthCheckEnableEpoch,
+		keyPrefix:             []byte(baseDCTKeyPrefix),
+		globalSettingsHandler: globalSettingsHandler,
+		rolesHandler:          rolesHandler,
+		funcGasCost:           funcGasCost,
+		mutExecution:          sync.RWMutex{},
+		dctStorageHandler:    dctStorageHandler,
+		enableEpochsHandler:   enableEpochsHandler,
 	}
 
-	epochNotifier.RegisterNotifyHandler(e)
-
 	return e, nil
-}
-
-// EpochConfirmed is called whenever a new epoch is confirmed
-func (e *dctNFTAddQuantity) EpochConfirmed(epoch uint32, _ uint64) {
-	e.flagValueLengthCheck.SetValue(epoch >= e.valueLengthCheckEnableEpoch)
-	log.Debug("DCT Add Quantity value length check", "enabled", e.flagValueLengthCheck.IsSet())
 }
 
 // SetNewGasConfig is called whenever gas cost is changed
@@ -115,7 +103,8 @@ func (e *dctNFTAddQuantity) ProcessBuiltinFunction(
 		return nil, ErrNFTDoesNotHaveMetadata
 	}
 
-	if e.flagValueLengthCheck.IsSet() && len(vmInput.Arguments[2]) > maxLenForAddNFTQuantity {
+	isValueLengthCheckFlagEnabled := e.enableEpochsHandler.IsValueLengthCheckFlagEnabled()
+	if isValueLengthCheckFlagEnabled && len(vmInput.Arguments[2]) > maxLenForAddNFTQuantity {
 		return nil, fmt.Errorf("%w max length for add nft quantity is %d", ErrInvalidArguments, maxLenForAddNFTQuantity)
 	}
 
@@ -123,6 +112,10 @@ func (e *dctNFTAddQuantity) ProcessBuiltinFunction(
 	dctData.Value.Add(dctData.Value, value)
 
 	_, err = e.dctStorageHandler.SaveDCTNFTToken(acntSnd.AddressBytes(), acntSnd, dctTokenKey, nonce, dctData, false, vmInput.ReturnCallAfterError)
+	if err != nil {
+		return nil, err
+	}
+	err = e.dctStorageHandler.AddToLiquiditySystemAcc(dctTokenKey, nonce, value)
 	if err != nil {
 		return nil, err
 	}

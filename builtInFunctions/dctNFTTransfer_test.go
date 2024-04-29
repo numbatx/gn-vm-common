@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var keyPrefix = []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier)
+var keyPrefix = []byte(baseDCTKeyPrefix)
 
 func createNftTransferWithStubArguments() *dctNFTTransfer {
 	nftTransfer, _ := NewDCTNFTTransferFunc(
@@ -27,19 +27,19 @@ func createNftTransferWithStubArguments() *dctNFTTransfer {
 		&mock.ShardCoordinatorStub{},
 		vmcommon.BaseOperationCost{},
 		&mock.DCTRoleHandlerStub{},
-		1000,
-		0,
-		0,
-		0,
 		createNewDCTDataStorageHandler(),
-		&mock.EpochNotifierStub{},
+		&mock.EnableEpochsHandlerStub{
+			IsTransferToMetaFlagEnabledField:                     false,
+			IsSaveToSystemAccountFlagEnabledField:                true,
+			IsCheckCorrectTokenIDForTransferRoleFlagEnabledField: true,
+		},
 	)
 
 	return nftTransfer
 }
 
-func createNFTTransferAndStorageHandler(selfShard, numShards uint32, globalSettingsHandler vmcommon.DCTGlobalSettingsHandler) (*dctNFTTransfer, *dctDataStorage) {
-	marshalizer := &mock.MarshalizerMock{}
+func createNFTTransferAndStorageHandler(selfShard, numShards uint32, globalSettingsHandler vmcommon.ExtendedDCTGlobalSettingsHandler, enableEpochsHandler vmcommon.EnableEpochsHandler) (*dctNFTTransfer, *dctDataStorage) {
+	marshaller := &mock.MarshalizerMock{}
 	shardCoordinator := mock.NewMultiShardsCoordinatorMock(numShards)
 	shardCoordinator.CurrentShard = selfShard
 	shardCoordinator.ComputeIdCalled = func(address []byte) uint32 {
@@ -64,10 +64,10 @@ func createNFTTransferAndStorageHandler(selfShard, numShards uint32, globalSetti
 		},
 	}
 
-	dctStorageHandler := createNewDCTDataStorageHandlerWithArgs(globalSettingsHandler, accounts)
+	dctStorageHandler := createNewDCTDataStorageHandlerWithArgs(globalSettingsHandler, accounts, enableEpochsHandler)
 	nftTransfer, _ := NewDCTNFTTransferFunc(
 		1,
-		marshalizer,
+		marshaller,
 		globalSettingsHandler,
 		accounts,
 		shardCoordinator,
@@ -80,19 +80,19 @@ func createNFTTransferAndStorageHandler(selfShard, numShards uint32, globalSetti
 				return nil
 			},
 		},
-		1000,
-		0,
-		0,
-		0,
 		dctStorageHandler,
-		&mock.EpochNotifierStub{},
+		enableEpochsHandler,
 	)
 
 	return nftTransfer, dctStorageHandler
 }
 
-func createNftTransferWithMockArguments(selfShard uint32, numShards uint32, globalSettingsHandler vmcommon.DCTGlobalSettingsHandler) *dctNFTTransfer {
-	nftTransfer, _ := createNFTTransferAndStorageHandler(selfShard, numShards, globalSettingsHandler)
+func createNftTransferWithMockArguments(selfShard uint32, numShards uint32, globalSettingsHandler vmcommon.ExtendedDCTGlobalSettingsHandler) *dctNFTTransfer {
+	nftTransfer, _ := createNFTTransferAndStorageHandler(selfShard, numShards, globalSettingsHandler, &mock.EnableEpochsHandlerStub{
+		IsTransferToMetaFlagEnabledField:        true,
+		IsCheckTransferFlagEnabledField:         true,
+		IsCheckFrozenCollectionFlagEnabledField: true,
+	})
 	return nftTransfer
 }
 
@@ -132,7 +132,7 @@ func createDCTNFTToken(
 	nftType core.DCTType,
 	nonce uint64,
 	value *big.Int,
-	marshalizer vmcommon.Marshalizer,
+	marshaller vmcommon.Marshalizer,
 	account vmcommon.UserAccountHandler,
 ) {
 	tokenId := append(keyPrefix, tokenName...)
@@ -150,14 +150,14 @@ func createDCTNFTToken(
 		}
 	}
 
-	buff, _ := marshalizer.Marshal(dctData)
+	buff, _ := marshaller.Marshal(dctData)
 
 	_ = account.AccountDataHandler().SaveKeyValue(dctNFTTokenKey, buff)
 }
 
 func testNFTTokenShouldExist(
 	tb testing.TB,
-	marshalizer vmcommon.Marshalizer,
+	marshaller vmcommon.Marshalizer,
 	account vmcommon.AccountHandler,
 	tokenName []byte,
 	nonce uint64,
@@ -166,172 +166,161 @@ func testNFTTokenShouldExist(
 	tokenId := append(keyPrefix, tokenName...)
 	dctNFTTokenKey := computeDCTNFTTokenKey(tokenId, nonce)
 	dctData := &dct.DCToken{Value: big.NewInt(0), Type: uint32(core.Fungible)}
-	marshaledData, _ := account.(vmcommon.UserAccountHandler).AccountDataHandler().RetrieveValue(dctNFTTokenKey)
-	_ = marshalizer.Unmarshal(dctData, marshaledData)
+	marshaledData, _, _ := account.(vmcommon.UserAccountHandler).AccountDataHandler().RetrieveValue(dctNFTTokenKey)
+	_ = marshaller.Unmarshal(dctData, marshaledData)
 	assert.Equal(tb, expectedValue, dctData.Value)
-}
-
-func TestNewDCTNFTTransferFunc_NilArgumentsShouldErr(t *testing.T) {
-	t.Parallel()
-
-	nftTransfer, err := NewDCTNFTTransferFunc(
-		0,
-		nil,
-		&mock.GlobalSettingsHandlerStub{},
-		&mock.AccountsStub{},
-		&mock.ShardCoordinatorStub{},
-		vmcommon.BaseOperationCost{},
-		&mock.DCTRoleHandlerStub{},
-		1000,
-		0,
-		0,
-		0,
-		createNewDCTDataStorageHandler(),
-		&mock.EpochNotifierStub{},
-	)
-	assert.True(t, check.IfNil(nftTransfer))
-	assert.Equal(t, ErrNilMarshalizer, err)
-
-	nftTransfer, err = NewDCTNFTTransferFunc(
-		0,
-		&mock.MarshalizerMock{},
-		nil,
-		&mock.AccountsStub{},
-		&mock.ShardCoordinatorStub{},
-		vmcommon.BaseOperationCost{},
-		&mock.DCTRoleHandlerStub{},
-		1000,
-		0,
-		0,
-		0,
-		createNewDCTDataStorageHandler(),
-		&mock.EpochNotifierStub{},
-	)
-	assert.True(t, check.IfNil(nftTransfer))
-	assert.Equal(t, ErrNilGlobalSettingsHandler, err)
-
-	nftTransfer, err = NewDCTNFTTransferFunc(
-		0,
-		&mock.MarshalizerMock{},
-		&mock.GlobalSettingsHandlerStub{},
-		nil,
-		&mock.ShardCoordinatorStub{},
-		vmcommon.BaseOperationCost{},
-		&mock.DCTRoleHandlerStub{},
-		1000,
-		0,
-		0,
-		0,
-		createNewDCTDataStorageHandler(),
-		&mock.EpochNotifierStub{},
-	)
-	assert.True(t, check.IfNil(nftTransfer))
-	assert.Equal(t, ErrNilAccountsAdapter, err)
-
-	nftTransfer, err = NewDCTNFTTransferFunc(
-		0,
-		&mock.MarshalizerMock{},
-		&mock.GlobalSettingsHandlerStub{},
-		&mock.AccountsStub{},
-		nil,
-		vmcommon.BaseOperationCost{},
-		&mock.DCTRoleHandlerStub{},
-		1000,
-		0,
-		0,
-		0,
-		createNewDCTDataStorageHandler(),
-		&mock.EpochNotifierStub{},
-	)
-	assert.True(t, check.IfNil(nftTransfer))
-	assert.Equal(t, ErrNilShardCoordinator, err)
-
-	nftTransfer, err = NewDCTNFTTransferFunc(
-		0,
-		&mock.MarshalizerMock{},
-		&mock.GlobalSettingsHandlerStub{},
-		&mock.AccountsStub{},
-		&mock.ShardCoordinatorStub{},
-		vmcommon.BaseOperationCost{},
-		nil,
-		1000,
-		0,
-		0,
-		0,
-		createNewDCTDataStorageHandler(),
-		&mock.EpochNotifierStub{},
-	)
-	assert.True(t, check.IfNil(nftTransfer))
-	assert.Equal(t, ErrNilRolesHandler, err)
-
-	nftTransfer, err = NewDCTNFTTransferFunc(
-		0,
-		&mock.MarshalizerMock{},
-		&mock.GlobalSettingsHandlerStub{},
-		&mock.AccountsStub{},
-		&mock.ShardCoordinatorStub{},
-		vmcommon.BaseOperationCost{},
-		&mock.DCTRoleHandlerStub{},
-		1000,
-		0,
-		0,
-		0,
-		createNewDCTDataStorageHandler(),
-		nil,
-	)
-	assert.True(t, check.IfNil(nftTransfer))
-	assert.Equal(t, ErrNilEpochHandler, err)
-
-	nftTransfer, err = NewDCTNFTTransferFunc(
-		0,
-		&mock.MarshalizerMock{},
-		&mock.GlobalSettingsHandlerStub{},
-		&mock.AccountsStub{},
-		&mock.ShardCoordinatorStub{},
-		vmcommon.BaseOperationCost{},
-		&mock.DCTRoleHandlerStub{},
-		1000,
-		0,
-		0,
-		0,
-		nil,
-		&mock.EpochNotifierStub{},
-	)
-	assert.True(t, check.IfNil(nftTransfer))
-	assert.Equal(t, ErrNilDCTNFTStorageHandler, err)
 }
 
 func TestNewDCTNFTTransferFunc(t *testing.T) {
 	t.Parallel()
 
-	nftTransfer, err := NewDCTNFTTransferFunc(
-		0,
-		&mock.MarshalizerMock{},
-		&mock.GlobalSettingsHandlerStub{},
-		&mock.AccountsStub{},
-		&mock.ShardCoordinatorStub{},
-		vmcommon.BaseOperationCost{},
-		&mock.DCTRoleHandlerStub{},
-		1000,
-		0,
-		0,
-		0,
-		createNewDCTDataStorageHandler(),
-		&mock.EpochNotifierStub{},
-	)
-	assert.False(t, check.IfNil(nftTransfer))
-	assert.Nil(t, err)
+	t.Run("nil marshaller should error", func(t *testing.T) {
+		t.Parallel()
+
+		nftTransfer, err := NewDCTNFTTransferFunc(
+			0,
+			nil,
+			&mock.GlobalSettingsHandlerStub{},
+			&mock.AccountsStub{},
+			&mock.ShardCoordinatorStub{},
+			vmcommon.BaseOperationCost{},
+			&mock.DCTRoleHandlerStub{},
+			createNewDCTDataStorageHandler(),
+			&mock.EnableEpochsHandlerStub{},
+		)
+		assert.True(t, check.IfNil(nftTransfer))
+		assert.Equal(t, ErrNilMarshalizer, err)
+	})
+	t.Run("nil global settings handler should error", func(t *testing.T) {
+		t.Parallel()
+
+		nftTransfer, err := NewDCTNFTTransferFunc(
+			0,
+			&mock.MarshalizerMock{},
+			nil,
+			&mock.AccountsStub{},
+			&mock.ShardCoordinatorStub{},
+			vmcommon.BaseOperationCost{},
+			&mock.DCTRoleHandlerStub{},
+			createNewDCTDataStorageHandler(),
+			&mock.EnableEpochsHandlerStub{},
+		)
+		assert.True(t, check.IfNil(nftTransfer))
+		assert.Equal(t, ErrNilGlobalSettingsHandler, err)
+	})
+	t.Run("nil accounts adapter should error", func(t *testing.T) {
+		t.Parallel()
+
+		nftTransfer, err := NewDCTNFTTransferFunc(
+			0,
+			&mock.MarshalizerMock{},
+			&mock.GlobalSettingsHandlerStub{},
+			nil,
+			&mock.ShardCoordinatorStub{},
+			vmcommon.BaseOperationCost{},
+			&mock.DCTRoleHandlerStub{},
+			createNewDCTDataStorageHandler(),
+			&mock.EnableEpochsHandlerStub{},
+		)
+		assert.True(t, check.IfNil(nftTransfer))
+		assert.Equal(t, ErrNilAccountsAdapter, err)
+	})
+	t.Run("nil shard coordinator should error", func(t *testing.T) {
+		t.Parallel()
+
+		nftTransfer, err := NewDCTNFTTransferFunc(
+			0,
+			&mock.MarshalizerMock{},
+			&mock.GlobalSettingsHandlerStub{},
+			&mock.AccountsStub{},
+			nil,
+			vmcommon.BaseOperationCost{},
+			&mock.DCTRoleHandlerStub{},
+			createNewDCTDataStorageHandler(),
+			&mock.EnableEpochsHandlerStub{},
+		)
+		assert.True(t, check.IfNil(nftTransfer))
+		assert.Equal(t, ErrNilShardCoordinator, err)
+	})
+	t.Run("nil roles handler should error", func(t *testing.T) {
+		t.Parallel()
+
+		nftTransfer, err := NewDCTNFTTransferFunc(
+			0,
+			&mock.MarshalizerMock{},
+			&mock.GlobalSettingsHandlerStub{},
+			&mock.AccountsStub{},
+			&mock.ShardCoordinatorStub{},
+			vmcommon.BaseOperationCost{},
+			nil,
+			createNewDCTDataStorageHandler(),
+			&mock.EnableEpochsHandlerStub{},
+		)
+		assert.True(t, check.IfNil(nftTransfer))
+		assert.Equal(t, ErrNilRolesHandler, err)
+	})
+	t.Run("nil dct storage handler should error", func(t *testing.T) {
+		t.Parallel()
+
+		nftTransfer, err := NewDCTNFTTransferFunc(
+			0,
+			&mock.MarshalizerMock{},
+			&mock.GlobalSettingsHandlerStub{},
+			&mock.AccountsStub{},
+			&mock.ShardCoordinatorStub{},
+			vmcommon.BaseOperationCost{},
+			&mock.DCTRoleHandlerStub{},
+			nil,
+			&mock.EnableEpochsHandlerStub{},
+		)
+		assert.True(t, check.IfNil(nftTransfer))
+		assert.Equal(t, ErrNilDCTNFTStorageHandler, err)
+	})
+	t.Run("nil enable epochs handler should error", func(t *testing.T) {
+		t.Parallel()
+
+		nftTransfer, err := NewDCTNFTTransferFunc(
+			0,
+			&mock.MarshalizerMock{},
+			&mock.GlobalSettingsHandlerStub{},
+			&mock.AccountsStub{},
+			&mock.ShardCoordinatorStub{},
+			vmcommon.BaseOperationCost{},
+			&mock.DCTRoleHandlerStub{},
+			createNewDCTDataStorageHandler(),
+			nil,
+		)
+		assert.True(t, check.IfNil(nftTransfer))
+		assert.Equal(t, ErrNilEnableEpochsHandler, err)
+	})
+	t.Run("should work", func(t *testing.T) {
+		t.Parallel()
+
+		nftTransfer, err := NewDCTNFTTransferFunc(
+			0,
+			&mock.MarshalizerMock{},
+			&mock.GlobalSettingsHandlerStub{},
+			&mock.AccountsStub{},
+			&mock.ShardCoordinatorStub{},
+			vmcommon.BaseOperationCost{},
+			&mock.DCTRoleHandlerStub{},
+			createNewDCTDataStorageHandler(),
+			&mock.EnableEpochsHandlerStub{},
+		)
+		assert.False(t, check.IfNil(nftTransfer))
+		assert.Nil(t, err)
+	})
 }
 
 func TestDctNFTTransfer_SetPayable(t *testing.T) {
 	t.Parallel()
 
 	nftTransfer := createNftTransferWithStubArguments()
-	err := nftTransfer.SetPayableHandler(nil)
+	err := nftTransfer.SetPayableChecker(nil)
 	assert.Equal(t, ErrNilPayableHandler, err)
 
 	handler := &mock.PayableHandlerStub{}
-	err = nftTransfer.SetPayableHandler(handler)
+	err = nftTransfer.SetPayableChecker(handler)
 	assert.Nil(t, err)
 	assert.True(t, handler == nftTransfer.payableHandler) // pointer testing
 }
@@ -392,7 +381,7 @@ func TestDctNFTTransfer_SenderDoesNotHaveNFT(t *testing.T) {
 	t.Parallel()
 
 	nftTransfer := createNftTransferWithMockArguments(0, 1, &mock.GlobalSettingsHandlerStub{})
-	_ = nftTransfer.SetPayableHandler(
+	_ = nftTransfer.SetPayableChecker(
 		&mock.PayableHandlerStub{
 			IsPayableCalled: func(address []byte) (bool, error) {
 				return true, nil
@@ -441,7 +430,7 @@ func TestDctNFTTransfer_ProcessWithZeroValue(t *testing.T) {
 	tokenNonce := uint64(1)
 
 	initialTokens := big.NewInt(3)
-	createDCTNFTToken(tokenName, core.NonFungible, tokenNonce, initialTokens, nftTransfer.marshalizer, sender.(vmcommon.UserAccountHandler))
+	createDCTNFTToken(tokenName, core.NonFungible, tokenNonce, initialTokens, nftTransfer.marshaller, sender.(vmcommon.UserAccountHandler))
 	_ = nftTransfer.accounts.SaveAccount(sender)
 	_ = nftTransfer.accounts.SaveAccount(destination)
 	_, _ = nftTransfer.accounts.Commit()
@@ -476,12 +465,18 @@ func TestDctNFTTransfer_ProcessBuiltinFunctionOnSameShardWithScCall(t *testing.T
 	t.Parallel()
 
 	nftTransfer := createNftTransferWithMockArguments(0, 1, &mock.GlobalSettingsHandlerStub{})
-	_ = nftTransfer.SetPayableHandler(
+
+	payableChecker, _ := NewPayableCheckFunc(
 		&mock.PayableHandlerStub{
 			IsPayableCalled: func(address []byte) (bool, error) {
 				return true, nil
 			},
+		}, &mock.EnableEpochsHandlerStub{
+			IsFixAsyncCallbackCheckFlagEnabledField: true,
+			IsCheckFunctionArgumentFlagEnabledField: true,
 		})
+
+	_ = nftTransfer.SetPayableChecker(payableChecker)
 	senderAddress := bytes.Repeat([]byte{2}, 32)
 	destinationAddress := bytes.Repeat([]byte{0}, 32)
 	destinationAddress[25] = 1
@@ -494,7 +489,7 @@ func TestDctNFTTransfer_ProcessBuiltinFunctionOnSameShardWithScCall(t *testing.T
 	tokenNonce := uint64(1)
 
 	initialTokens := big.NewInt(3)
-	createDCTNFTToken(tokenName, core.NonFungible, tokenNonce, initialTokens, nftTransfer.marshalizer, sender.(vmcommon.UserAccountHandler))
+	createDCTNFTToken(tokenName, core.NonFungible, tokenNonce, initialTokens, nftTransfer.marshaller, sender.(vmcommon.UserAccountHandler))
 	_ = nftTransfer.accounts.SaveAccount(sender)
 	_ = nftTransfer.accounts.SaveAccount(destination)
 	_, _ = nftTransfer.accounts.Commit()
@@ -534,8 +529,8 @@ func TestDctNFTTransfer_ProcessBuiltinFunctionOnSameShardWithScCall(t *testing.T
 	destination, err = nftTransfer.accounts.LoadAccount(destinationAddress)
 	require.Nil(t, err)
 
-	testNFTTokenShouldExist(t, nftTransfer.marshalizer, sender, tokenName, tokenNonce, big.NewInt(2)) // 3 initial - 1 transferred
-	testNFTTokenShouldExist(t, nftTransfer.marshalizer, destination, tokenName, tokenNonce, big.NewInt(1))
+	testNFTTokenShouldExist(t, nftTransfer.marshaller, sender, tokenName, tokenNonce, big.NewInt(2)) // 3 initial - 1 transferred
+	testNFTTokenShouldExist(t, nftTransfer.marshaller, destination, tokenName, tokenNonce, big.NewInt(1))
 	funcName, args := extractScResultsFromVmOutput(t, vmOutput)
 	assert.Equal(t, scCallFunctionAsHex, funcName)
 	require.Equal(t, 1, len(args))
@@ -552,10 +547,10 @@ func TestDctNFTTransfer_ProcessBuiltinFunctionOnCrossShardsDestinationDoesNotHol
 	}
 
 	nftTransferSenderShard := createNftTransferWithMockArguments(1, 2, &mock.GlobalSettingsHandlerStub{})
-	_ = nftTransferSenderShard.SetPayableHandler(payableHandler)
+	_ = nftTransferSenderShard.SetPayableChecker(payableHandler)
 
 	nftTransferDestinationShard := createNftTransferWithMockArguments(0, 2, &mock.GlobalSettingsHandlerStub{})
-	_ = nftTransferDestinationShard.SetPayableHandler(payableHandler)
+	_ = nftTransferDestinationShard.SetPayableChecker(payableHandler)
 
 	senderAddress := bytes.Repeat([]byte{1}, 32)
 	destinationAddress := bytes.Repeat([]byte{0}, 32)
@@ -567,7 +562,7 @@ func TestDctNFTTransfer_ProcessBuiltinFunctionOnCrossShardsDestinationDoesNotHol
 	tokenNonce := uint64(1)
 
 	initialTokens := big.NewInt(3)
-	createDCTNFTToken(tokenName, core.NonFungible, tokenNonce, initialTokens, nftTransferSenderShard.marshalizer, sender.(vmcommon.UserAccountHandler))
+	createDCTNFTToken(tokenName, core.NonFungible, tokenNonce, initialTokens, nftTransferSenderShard.marshaller, sender.(vmcommon.UserAccountHandler))
 	_ = nftTransferSenderShard.accounts.SaveAccount(sender)
 	_, _ = nftTransferSenderShard.accounts.Commit()
 
@@ -602,7 +597,7 @@ func TestDctNFTTransfer_ProcessBuiltinFunctionOnCrossShardsDestinationDoesNotHol
 	sender, err = nftTransferSenderShard.accounts.LoadAccount(senderAddress)
 	require.Nil(t, err)
 
-	testNFTTokenShouldExist(t, nftTransferSenderShard.marshalizer, sender, tokenName, tokenNonce, big.NewInt(2)) // 3 initial - 1 transferred
+	testNFTTokenShouldExist(t, nftTransferSenderShard.marshaller, sender, tokenName, tokenNonce, big.NewInt(2)) // 3 initial - 1 transferred
 
 	funcName, args := extractScResultsFromVmOutput(t, vmOutput)
 
@@ -627,7 +622,7 @@ func TestDctNFTTransfer_ProcessBuiltinFunctionOnCrossShardsDestinationDoesNotHol
 	destination, err = nftTransferDestinationShard.accounts.LoadAccount(destinationAddress)
 	require.Nil(t, err)
 
-	testNFTTokenShouldExist(t, nftTransferDestinationShard.marshalizer, destination, tokenName, tokenNonce, big.NewInt(1))
+	testNFTTokenShouldExist(t, nftTransferDestinationShard.marshaller, destination, tokenName, tokenNonce, big.NewInt(1))
 	funcName, args = extractScResultsFromVmOutput(t, vmOutput)
 	assert.Equal(t, scCallFunctionAsHex, funcName)
 	require.Equal(t, 1, len(args))
@@ -644,10 +639,10 @@ func TestDctNFTTransfer_ProcessBuiltinFunctionOnCrossShardsDestinationHoldsNFT(t
 	}
 
 	nftTransferSenderShard := createNftTransferWithMockArguments(0, 2, &mock.GlobalSettingsHandlerStub{})
-	_ = nftTransferSenderShard.SetPayableHandler(payableHandler)
+	_ = nftTransferSenderShard.SetPayableChecker(payableHandler)
 
 	nftTransferDestinationShard := createNftTransferWithMockArguments(1, 2, &mock.GlobalSettingsHandlerStub{})
-	_ = nftTransferDestinationShard.SetPayableHandler(payableHandler)
+	_ = nftTransferDestinationShard.SetPayableChecker(payableHandler)
 
 	senderAddress := bytes.Repeat([]byte{2}, 32) // sender is in the same shard
 	destinationAddress := bytes.Repeat([]byte{1}, 32)
@@ -658,7 +653,7 @@ func TestDctNFTTransfer_ProcessBuiltinFunctionOnCrossShardsDestinationHoldsNFT(t
 	tokenNonce := uint64(1)
 
 	initialTokens := big.NewInt(3)
-	createDCTNFTToken(tokenName, core.NonFungible, tokenNonce, initialTokens, nftTransferSenderShard.marshalizer, sender.(vmcommon.UserAccountHandler))
+	createDCTNFTToken(tokenName, core.NonFungible, tokenNonce, initialTokens, nftTransferSenderShard.marshaller, sender.(vmcommon.UserAccountHandler))
 	_ = nftTransferSenderShard.accounts.SaveAccount(sender)
 	_, _ = nftTransferSenderShard.accounts.Commit()
 
@@ -689,14 +684,14 @@ func TestDctNFTTransfer_ProcessBuiltinFunctionOnCrossShardsDestinationHoldsNFT(t
 	sender, err = nftTransferSenderShard.accounts.LoadAccount(senderAddress)
 	require.Nil(t, err)
 
-	testNFTTokenShouldExist(t, nftTransferSenderShard.marshalizer, sender, tokenName, tokenNonce, big.NewInt(2)) // 3 initial - 1 transferred
+	testNFTTokenShouldExist(t, nftTransferSenderShard.marshaller, sender, tokenName, tokenNonce, big.NewInt(2)) // 3 initial - 1 transferred
 
 	_, args := extractScResultsFromVmOutput(t, vmOutput)
 
 	destinationNumTokens := big.NewInt(1000)
 	destination, err := nftTransferDestinationShard.accounts.LoadAccount(destinationAddress)
 	require.Nil(t, err)
-	createDCTNFTToken(tokenName, core.NonFungible, tokenNonce, destinationNumTokens, nftTransferDestinationShard.marshalizer, destination.(vmcommon.UserAccountHandler))
+	createDCTNFTToken(tokenName, core.NonFungible, tokenNonce, destinationNumTokens, nftTransferDestinationShard.marshaller, destination.(vmcommon.UserAccountHandler))
 	_ = nftTransferDestinationShard.accounts.SaveAccount(destination)
 	_, _ = nftTransferDestinationShard.accounts.Commit()
 
@@ -722,7 +717,7 @@ func TestDctNFTTransfer_ProcessBuiltinFunctionOnCrossShardsDestinationHoldsNFT(t
 	require.Nil(t, err)
 
 	expected := big.NewInt(0).Add(destinationNumTokens, big.NewInt(1))
-	testNFTTokenShouldExist(t, nftTransferDestinationShard.marshalizer, destination, tokenName, tokenNonce, expected)
+	testNFTTokenShouldExist(t, nftTransferDestinationShard.marshaller, destination, tokenName, tokenNonce, expected)
 }
 
 func TestDCTNFTTransfer_SndDstFrozen(t *testing.T) {
@@ -730,7 +725,7 @@ func TestDCTNFTTransfer_SndDstFrozen(t *testing.T) {
 
 	globalSettings := &mock.GlobalSettingsHandlerStub{}
 	transferFunc := createNftTransferWithMockArguments(0, 1, globalSettings)
-	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
+	_ = transferFunc.SetPayableChecker(&mock.PayableHandlerStub{})
 
 	senderAddress := bytes.Repeat([]byte{2}, 32) // sender is in the same shard
 	destinationAddress := bytes.Repeat([]byte{1}, 32)
@@ -742,7 +737,7 @@ func TestDCTNFTTransfer_SndDstFrozen(t *testing.T) {
 	tokenNonce := uint64(1)
 
 	initialTokens := big.NewInt(3)
-	createDCTNFTToken(tokenName, core.NonFungible, tokenNonce, initialTokens, transferFunc.marshalizer, sender.(vmcommon.UserAccountHandler))
+	createDCTNFTToken(tokenName, core.NonFungible, tokenNonce, initialTokens, transferFunc.marshaller, sender.(vmcommon.UserAccountHandler))
 	dctFrozen := DCTUserMetadata{Frozen: true}
 
 	_ = transferFunc.accounts.SaveAccount(sender)
@@ -767,7 +762,7 @@ func TestDCTNFTTransfer_SndDstFrozen(t *testing.T) {
 	tokenId := append(keyPrefix, tokenName...)
 	dctKey := computeDCTNFTTokenKey(tokenId, tokenNonce)
 	dctToken := &dct.DCToken{Value: big.NewInt(0), Properties: dctFrozen.ToBytes()}
-	marshaledData, _ := transferFunc.marshalizer.Marshal(dctToken)
+	marshaledData, _ := transferFunc.marshaller.Marshal(dctToken)
 	_ = destination.(vmcommon.UserAccountHandler).AccountDataHandler().SaveKeyValue(dctKey, marshaledData)
 	_ = transferFunc.accounts.SaveAccount(destination)
 	_, _ = transferFunc.accounts.Commit()
@@ -785,7 +780,7 @@ func TestDCTNFTTransfer_WithLimitedTransfer(t *testing.T) {
 
 	globalSettings := &mock.GlobalSettingsHandlerStub{}
 	transferFunc := createNftTransferWithMockArguments(0, 1, globalSettings)
-	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
+	_ = transferFunc.SetPayableChecker(&mock.PayableHandlerStub{})
 
 	senderAddress := bytes.Repeat([]byte{2}, 32) // sender is in the same shard
 	destinationAddress := bytes.Repeat([]byte{1}, 32)
@@ -797,7 +792,7 @@ func TestDCTNFTTransfer_WithLimitedTransfer(t *testing.T) {
 	tokenNonce := uint64(1)
 
 	initialTokens := big.NewInt(3)
-	createDCTNFTToken(tokenName, core.NonFungible, tokenNonce, initialTokens, transferFunc.marshalizer, sender.(vmcommon.UserAccountHandler))
+	createDCTNFTToken(tokenName, core.NonFungible, tokenNonce, initialTokens, transferFunc.marshaller, sender.(vmcommon.UserAccountHandler))
 
 	_ = transferFunc.accounts.SaveAccount(sender)
 	_, _ = transferFunc.accounts.Commit()
@@ -833,7 +828,7 @@ func TestDCTNFTTransfer_NotEnoughGas(t *testing.T) {
 	t.Parallel()
 
 	transferFunc := createNftTransferWithMockArguments(0, 1, &mock.GlobalSettingsHandlerStub{})
-	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
+	_ = transferFunc.SetPayableChecker(&mock.PayableHandlerStub{})
 
 	senderAddress := bytes.Repeat([]byte{2}, 32) // sender is in the same shard
 	destinationAddress := bytes.Repeat([]byte{1}, 32)
@@ -844,7 +839,7 @@ func TestDCTNFTTransfer_NotEnoughGas(t *testing.T) {
 	tokenNonce := uint64(1)
 
 	initialTokens := big.NewInt(3)
-	createDCTNFTToken(tokenName, core.NonFungible, tokenNonce, initialTokens, transferFunc.marshalizer, sender.(vmcommon.UserAccountHandler))
+	createDCTNFTToken(tokenName, core.NonFungible, tokenNonce, initialTokens, transferFunc.marshaller, sender.(vmcommon.UserAccountHandler))
 	_ = transferFunc.accounts.SaveAccount(sender)
 	_, _ = transferFunc.accounts.Commit()
 	// reload sender account
@@ -898,10 +893,14 @@ func TestDCTNFTTransfer_SndDstFreezeCollection(t *testing.T) {
 	t.Parallel()
 
 	globalSettings := &mock.GlobalSettingsHandlerStub{}
-	transferFunc, dctStorageHandler := createNFTTransferAndStorageHandler(0, 1, globalSettings)
-	dctStorageHandler.flagCheckFrozenCollection.SetValue(true)
+	enableEpochsHandler := &mock.EnableEpochsHandlerStub{
+		IsTransferToMetaFlagEnabledField:        true,
+		IsCheckTransferFlagEnabledField:         true,
+		IsCheckFrozenCollectionFlagEnabledField: true,
+	}
+	transferFunc, _ := createNFTTransferAndStorageHandler(0, 1, globalSettings, enableEpochsHandler)
 
-	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
+	_ = transferFunc.SetPayableChecker(&mock.PayableHandlerStub{})
 
 	senderAddress := bytes.Repeat([]byte{2}, 32) // sender is in the same shard
 	destinationAddress := bytes.Repeat([]byte{1}, 32)
@@ -913,7 +912,7 @@ func TestDCTNFTTransfer_SndDstFreezeCollection(t *testing.T) {
 	tokenNonce := uint64(1)
 
 	initialTokens := big.NewInt(3)
-	createDCTNFTToken(tokenName, core.NonFungible, tokenNonce, initialTokens, transferFunc.marshalizer, sender.(vmcommon.UserAccountHandler))
+	createDCTNFTToken(tokenName, core.NonFungible, tokenNonce, initialTokens, transferFunc.marshaller, sender.(vmcommon.UserAccountHandler))
 	dctFrozen := DCTUserMetadata{Frozen: true}
 
 	_ = transferFunc.accounts.SaveAccount(sender)
@@ -937,7 +936,7 @@ func TestDCTNFTTransfer_SndDstFreezeCollection(t *testing.T) {
 	destination, _ := transferFunc.accounts.LoadAccount(destinationAddress)
 	tokenId := append(keyPrefix, tokenName...)
 	dctToken := &dct.DCToken{Value: big.NewInt(0), Properties: dctFrozen.ToBytes()}
-	marshaledData, _ := transferFunc.marshalizer.Marshal(dctToken)
+	marshaledData, _ := transferFunc.marshaller.Marshal(dctToken)
 	_ = destination.(vmcommon.UserAccountHandler).AccountDataHandler().SaveKeyValue(tokenId, marshaledData)
 	_ = transferFunc.accounts.SaveAccount(destination)
 	_, _ = transferFunc.accounts.Commit()
@@ -950,64 +949,83 @@ func TestDCTNFTTransfer_SndDstFreezeCollection(t *testing.T) {
 	assert.Nil(t, err)
 }
 
-func TestDCTNFTTransfer_EpochChange(t *testing.T) {
+func TestDctNFTTransfer_ProcessBuiltinFunctionCrossShardsFixOldLiquidityIssue(t *testing.T) {
 	t.Parallel()
 
-	var functionHandler vmcommon.EpochSubscriberHandler
-	notifier := &mock.EpochNotifierStub{
-		RegisterNotifyHandlerCalled: func(handler vmcommon.EpochSubscriberHandler) {
-			functionHandler = handler
+	vmInput, sender, nftTransferSenderShard, dctDataStorageHandler, tokenName, tokenNonce := createSetupToSendNFTCrossShard(t)
+
+	dctDataStorageHandler.enableEpochsHandler.(*mock.EnableEpochsHandlerStub).IsFixOldTokenLiquidityEnabledField = true
+	vmOutput, err := nftTransferSenderShard.ProcessBuiltinFunction(sender.(vmcommon.UserAccountHandler), nil, vmInput)
+	require.Nil(t, err)
+	require.Equal(t, vmcommon.Ok, vmOutput.ReturnCode)
+
+	_ = nftTransferSenderShard.accounts.SaveAccount(sender)
+	_, _ = nftTransferSenderShard.accounts.Commit()
+
+	// reload sender account
+	sender, err = nftTransferSenderShard.accounts.LoadAccount(sender.AddressBytes())
+	require.Nil(t, err)
+
+	testNFTTokenShouldExist(t, nftTransferSenderShard.marshaller, sender, tokenName, tokenNonce, big.NewInt(2)) // 3 initial - 1 transferred
+}
+
+func TestDctNFTTransfer_ProcessBuiltinFunctionCrossShardsFixOldLiquidityIssueWithoutActivation(t *testing.T) {
+	t.Parallel()
+
+	vmInput, sender, nftTransferSenderShard, dctDataStorageHandler, _, _ := createSetupToSendNFTCrossShard(t)
+
+	dctDataStorageHandler.enableEpochsHandler.(*mock.EnableEpochsHandlerStub).IsFixOldTokenLiquidityEnabledField = false
+	_, err := nftTransferSenderShard.ProcessBuiltinFunction(sender.(vmcommon.UserAccountHandler), nil, vmInput)
+	require.Equal(t, err, ErrInvalidLiquidityForDCT)
+}
+
+func createSetupToSendNFTCrossShard(t *testing.T) (*vmcommon.ContractCallInput, vmcommon.AccountHandler, *dctNFTTransfer, *dctDataStorage, []byte, uint64) {
+	payableHandler := &mock.PayableHandlerStub{
+		IsPayableCalled: func(address []byte) (bool, error) {
+			return true, nil
 		},
 	}
-	transferFunc, _ := NewDCTNFTTransferFunc(
-		0,
-		&mock.MarshalizerMock{},
-		&mock.GlobalSettingsHandlerStub{},
-		&mock.AccountsStub{},
-		&mock.ShardCoordinatorStub{},
-		vmcommon.BaseOperationCost{},
-		&mock.DCTRoleHandlerStub{},
-		1,
-		2,
-		3,
-		4,
-		createNewDCTDataStorageHandler(),
-		notifier,
-	)
 
-	functionHandler.EpochConfirmed(0, 0)
-	assert.False(t, transferFunc.flagTransferToMeta.IsSet())
-	assert.False(t, transferFunc.flagCheck0Transfer.IsSet())
-	assert.False(t, transferFunc.flagCheckCorrectTokenID.IsSet())
-	assert.False(t, transferFunc.flagCheckFunctionArgument.IsSet())
+	var enableEpochsHandler = &mock.EnableEpochsHandlerStub{
+		IsSendAlwaysFlagEnabledField:            true,
+		IsSaveToSystemAccountFlagEnabledField:   true,
+		IsCheckFrozenCollectionFlagEnabledField: true,
+	}
+	nftTransferSenderShard, dctDataStorageHandler := createNFTTransferAndStorageHandler(1, 2, &mock.GlobalSettingsHandlerStub{}, enableEpochsHandler)
+	_ = nftTransferSenderShard.SetPayableChecker(payableHandler)
 
-	functionHandler.EpochConfirmed(1, 0)
-	assert.True(t, transferFunc.flagTransferToMeta.IsSet())
-	assert.False(t, transferFunc.flagCheck0Transfer.IsSet())
-	assert.False(t, transferFunc.flagCheckCorrectTokenID.IsSet())
-	assert.False(t, transferFunc.flagCheckFunctionArgument.IsSet())
+	senderAddress := bytes.Repeat([]byte{1}, 32)
+	destinationAddress := bytes.Repeat([]byte{2}, 32)
+	sender, err := nftTransferSenderShard.accounts.LoadAccount(senderAddress)
+	require.Nil(t, err)
 
-	functionHandler.EpochConfirmed(2, 0)
-	assert.True(t, transferFunc.flagTransferToMeta.IsSet())
-	assert.True(t, transferFunc.flagCheck0Transfer.IsSet())
-	assert.False(t, transferFunc.flagCheckCorrectTokenID.IsSet())
-	assert.False(t, transferFunc.flagCheckFunctionArgument.IsSet())
+	tokenName := []byte("token")
+	tokenNonce := uint64(1)
 
-	functionHandler.EpochConfirmed(3, 0)
-	assert.True(t, transferFunc.flagTransferToMeta.IsSet())
-	assert.True(t, transferFunc.flagCheck0Transfer.IsSet())
-	assert.True(t, transferFunc.flagCheckCorrectTokenID.IsSet())
-	assert.False(t, transferFunc.flagCheckFunctionArgument.IsSet())
+	initialTokens := big.NewInt(3)
+	createDCTNFTToken(tokenName, core.NonFungible, tokenNonce, initialTokens, nftTransferSenderShard.marshaller, sender.(vmcommon.UserAccountHandler))
+	_ = nftTransferSenderShard.accounts.SaveAccount(sender)
+	_, _ = nftTransferSenderShard.accounts.Commit()
 
-	functionHandler.EpochConfirmed(4, 0)
-	assert.True(t, transferFunc.flagTransferToMeta.IsSet())
-	assert.True(t, transferFunc.flagCheck0Transfer.IsSet())
-	assert.True(t, transferFunc.flagCheckCorrectTokenID.IsSet())
-	assert.True(t, transferFunc.flagCheckFunctionArgument.IsSet())
+	// reload sender account
+	sender, err = nftTransferSenderShard.accounts.LoadAccount(senderAddress)
+	require.Nil(t, err)
 
-	functionHandler.EpochConfirmed(5, 0)
-	assert.True(t, transferFunc.flagTransferToMeta.IsSet())
-	assert.True(t, transferFunc.flagCheck0Transfer.IsSet())
-	assert.True(t, transferFunc.flagCheckCorrectTokenID.IsSet())
-	assert.True(t, transferFunc.flagCheckFunctionArgument.IsSet())
+	nonceBytes := big.NewInt(int64(tokenNonce)).Bytes()
+	quantityBytes := big.NewInt(1).Bytes()
+	scCallFunctionAsHex := hex.EncodeToString([]byte("functionToCall"))
+	scCallArg := hex.EncodeToString([]byte("arg"))
+	scCallArgs := [][]byte{[]byte(scCallFunctionAsHex), []byte(scCallArg)}
+	vmInput := &vmcommon.ContractCallInput{
+		VMInput: vmcommon.VMInput{
+			CallValue:   big.NewInt(0),
+			CallerAddr:  senderAddress,
+			Arguments:   [][]byte{tokenName, nonceBytes, quantityBytes, destinationAddress},
+			GasProvided: 1,
+		},
+		RecipientAddr: senderAddress,
+	}
+	vmInput.Arguments = append(vmInput.Arguments, scCallArgs...)
+
+	return vmInput, sender, nftTransferSenderShard, dctDataStorageHandler, tokenName, tokenNonce
 }

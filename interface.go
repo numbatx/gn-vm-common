@@ -21,7 +21,7 @@ type BlockchainHook interface {
 	// GetStorageData should yield the storage value for a certain account and index.
 	// Should return an empty byte array if the key is missing from the account storage,
 	// or if account does not exist.
-	GetStorageData(accountAddress []byte, index []byte) ([]byte, error)
+	GetStorageData(accountAddress []byte, index []byte) ([]byte, uint32, error)
 
 	// GetBlockhash returns the hash of the block with the asked nonce if available
 	GetBlockhash(nonce uint64) ([]byte, error)
@@ -171,7 +171,7 @@ type UserAccountHandler interface {
 
 // AccountDataHandler models what how to manipulate data held by a SC account
 type AccountDataHandler interface {
-	RetrieveValue(key []byte) ([]byte, error)
+	RetrieveValue(key []byte) ([]byte, uint32, error)
 	SaveKeyValue(key []byte, value []byte) error
 	IsInterfaceNil() bool
 }
@@ -196,6 +196,15 @@ type Marshalizer interface {
 type DCTGlobalSettingsHandler interface {
 	IsPaused(dctTokenKey []byte) bool
 	IsLimitedTransfer(dctTokenKey []byte) bool
+	IsInterfaceNil() bool
+}
+
+// ExtendedDCTGlobalSettingsHandler provides global settings functions for an DCT token
+type ExtendedDCTGlobalSettingsHandler interface {
+	IsPaused(dctTokenKey []byte) bool
+	IsLimitedTransfer(dctTokenKey []byte) bool
+	IsBurnForAll(dctTokenKey []byte) bool
+	IsSenderOrDestinationWithTransferRole(sender, destination, tokenID []byte) bool
 	IsInterfaceNil() bool
 }
 
@@ -234,7 +243,6 @@ type AccountsAdapter interface {
 	GetCode(codeHash []byte) []byte
 
 	RootHash() ([]byte, error)
-	RecreateTrie(rootHash []byte) error
 	IsInterfaceNil() bool
 }
 
@@ -254,12 +262,6 @@ type BuiltInFunctionContainer interface {
 	Remove(key string)
 	Len() int
 	Keys() map[string]struct{}
-	IsInterfaceNil() bool
-}
-
-// AcceptPayableHandler defines the methods to accept a payable handler through a set function
-type AcceptPayableHandler interface {
-	SetPayableHandler(payableHandler PayableHandler) error
 	IsInterfaceNil() bool
 }
 
@@ -288,6 +290,7 @@ type DCTNFTStorageHandler interface {
 	GetDCTNFTTokenOnDestination(acnt UserAccountHandler, dctTokenKey []byte, nonce uint64) (*dct.DCToken, bool, error)
 	WasAlreadySentToDestinationShardAndUpdateState(tickerID []byte, nonce uint64, dstAddress []byte) (bool, error)
 	SaveNFTMetaDataToSystemAccount(tx data.TransactionHandler) error
+	AddToLiquiditySystemAcc(dctTokenKey []byte, nonce uint64, transferValue *big.Int) error
 	IsInterfaceNil() bool
 }
 
@@ -301,5 +304,73 @@ type SimpleDCTNFTStorageHandler interface {
 // CallArgsParser will handle parsing transaction data to function and arguments
 type CallArgsParser interface {
 	ParseData(data string) (string, [][]byte, error)
+	ParseArguments(data string) ([][]byte, error)
+	IsInterfaceNil() bool
+}
+
+// BuiltInFunctionFactory will handle built-in functions and components
+type BuiltInFunctionFactory interface {
+	DCTGlobalSettingsHandler() DCTGlobalSettingsHandler
+	NFTStorageHandler() SimpleDCTNFTStorageHandler
+	BuiltInFunctionContainer() BuiltInFunctionContainer
+	SetPayableHandler(handler PayableHandler) error
+	CreateBuiltInFunctionContainer() error
+	IsInterfaceNil() bool
+}
+
+// PayableChecker will handle checking if transfer can happen of DCT tokens towards destination
+type PayableChecker interface {
+	CheckPayable(vmInput *ContractCallInput, dstAddress []byte, minLenArguments int) error
+	DetermineIsSCCallAfter(vmInput *ContractCallInput, destAddress []byte, minLenArguments int) bool
+	IsInterfaceNil() bool
+}
+
+// AcceptPayableChecker defines the methods to accept a payable handler through a set function
+type AcceptPayableChecker interface {
+	SetPayableChecker(payableHandler PayableChecker) error
+	IsInterfaceNil() bool
+}
+
+// EnableEpochsHandler is used to verify which flags are set in the current epoch based on EnableEpochs config
+type EnableEpochsHandler interface {
+	IsGlobalMintBurnFlagEnabled() bool
+	IsDCTTransferRoleFlagEnabled() bool
+	IsBuiltInFunctionsFlagEnabled() bool
+	IsCheckCorrectTokenIDForTransferRoleFlagEnabled() bool
+	IsMultiDCTTransferFixOnCallBackFlagEnabled() bool
+	IsFixOOGReturnCodeFlagEnabled() bool
+	IsRemoveNonUpdatedStorageFlagEnabled() bool
+	IsCreateNFTThroughExecByCallerFlagEnabled() bool
+	IsStorageAPICostOptimizationFlagEnabled() bool
+	IsFailExecutionOnEveryAPIErrorFlagEnabled() bool
+	IsManagedCryptoAPIsFlagEnabled() bool
+	IsSCDeployFlagEnabled() bool
+	IsAheadOfTimeGasUsageFlagEnabled() bool
+	IsRepairCallbackFlagEnabled() bool
+	IsDisableExecByCallerFlagEnabled() bool
+	IsRefactorContextFlagEnabled() bool
+	IsCheckFunctionArgumentFlagEnabled() bool
+	IsCheckExecuteOnReadOnlyFlagEnabled() bool
+	IsFixAsyncCallbackCheckFlagEnabled() bool
+	IsSaveToSystemAccountFlagEnabled() bool
+	IsCheckFrozenCollectionFlagEnabled() bool
+	IsSendAlwaysFlagEnabled() bool
+	IsValueLengthCheckFlagEnabled() bool
+	IsCheckTransferFlagEnabled() bool
+	IsTransferToMetaFlagEnabled() bool
+	IsDCTNFTImprovementV1FlagEnabled() bool
+	IsFixOldTokenLiquidityEnabled() bool
+
+	MultiDCTTransferAsyncCallBackEnableEpoch() uint32
+	FixOOGReturnCodeEnableEpoch() uint32
+	RemoveNonUpdatedStorageEnableEpoch() uint32
+	CreateNFTThroughExecByCallerEnableEpoch() uint32
+	FixFailExecutionOnErrorEnableEpoch() uint32
+	ManagedCryptoAPIEnableEpoch() uint32
+	DisableExecByCallerEnableEpoch() uint32
+	RefactorContextEnableEpoch() uint32
+	CheckExecuteReadOnlyEnableEpoch() uint32
+	StorageAPICostOptimizationEnableEpoch() uint32
+
 	IsInterfaceNil() bool
 }

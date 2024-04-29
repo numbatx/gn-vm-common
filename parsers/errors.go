@@ -31,5 +31,5 @@ var ErrNotDCTTransferInput = errors.New("not an DCT transfer input")
 // ErrNotEnoughArguments signals not enough arguments error
 var ErrNotEnoughArguments = errors.New("not enough arguments")
 
-// ErrNilMarshalizer signals that marshalizer is nil
-var ErrNilMarshalizer = errors.New("nil marshalizer")
+// ErrNilMarshalizer signals that marshaller is nil
+var ErrNilMarshalizer = errors.New("nil marshaller")

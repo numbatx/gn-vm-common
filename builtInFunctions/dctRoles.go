@@ -14,23 +14,23 @@ import (
 var roleKeyPrefix = []byte(core.NumbatProtectedKeyPrefix + core.DCTRoleIdentifier + core.DCTKeyIdentifier)
 
 type dctRoles struct {
-	baseAlwaysActive
-	set         bool
-	marshalizer vmcommon.Marshalizer
+	baseAlwaysActiveHandler
+	set        bool
+	marshaller vmcommon.Marshalizer
 }
 
 // NewDCTRolesFunc returns the dct change roles built-in function component
 func NewDCTRolesFunc(
-	marshalizer vmcommon.Marshalizer,
+	marshaller vmcommon.Marshalizer,
 	set bool,
 ) (*dctRoles, error) {
-	if check.IfNil(marshalizer) {
+	if check.IfNil(marshaller) {
 		return nil, ErrNilMarshalizer
 	}
 
 	e := &dctRoles{
-		set:         set,
-		marshalizer: marshalizer,
+		set:        set,
+		marshaller: marshaller,
 	}
 
 	return e, nil
@@ -58,7 +58,7 @@ func (e *dctRoles) ProcessBuiltinFunction(
 
 	dctTokenRoleKey := append(roleKeyPrefix, vmInput.Arguments[0]...)
 
-	roles, _, err := getDCTRolesForAcnt(e.marshalizer, acntDst, dctTokenRoleKey)
+	roles, _, err := getDCTRolesForAcnt(e.marshaller, acntDst, dctTokenRoleKey)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func (e *dctRoles) ProcessBuiltinFunction(
 		break
 	}
 
-	err = saveRolesToAccount(acntDst, dctTokenRoleKey, roles, e.marshalizer)
+	err = saveRolesToAccount(acntDst, dctTokenRoleKey, roles, e.marshaller)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +127,7 @@ func doesRoleExist(roles *dct.DCTRoles, role []byte) (int, bool) {
 }
 
 func getDCTRolesForAcnt(
-	marshalizer vmcommon.Marshalizer,
+	marshaller vmcommon.Marshalizer,
 	acnt vmcommon.UserAccountHandler,
 	key []byte,
 ) (*dct.DCTRoles, bool, error) {
@@ -135,12 +135,12 @@ func getDCTRolesForAcnt(
 		Roles: make([][]byte, 0),
 	}
 
-	marshaledData, err := acnt.AccountDataHandler().RetrieveValue(key)
+	marshaledData, _, err := acnt.AccountDataHandler().RetrieveValue(key)
 	if err != nil || len(marshaledData) == 0 {
 		return roles, true, nil
 	}
 
-	err = marshalizer.Unmarshal(roles, marshaledData)
+	err = marshaller.Unmarshal(roles, marshaledData)
 	if err != nil {
 		return nil, false, err
 	}
@@ -155,7 +155,7 @@ func (e *dctRoles) CheckAllowedToExecute(account vmcommon.UserAccountHandler, to
 	}
 
 	dctTokenRoleKey := append(roleKeyPrefix, tokenID...)
-	roles, isNew, err := getDCTRolesForAcnt(e.marshalizer, account, dctTokenRoleKey)
+	roles, isNew, err := getDCTRolesForAcnt(e.marshaller, account, dctTokenRoleKey)
 	if err != nil {
 		return err
 	}

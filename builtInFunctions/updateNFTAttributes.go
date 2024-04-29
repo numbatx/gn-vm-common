@@ -5,13 +5,12 @@ import (
 	"sync"
 
 	"github.com/numbatx/gn-core/core"
-	"github.com/numbatx/gn-core/core/atomic"
 	"github.com/numbatx/gn-core/core/check"
 	"github.com/numbatx/gn-vm-common"
 )
 
 type dctNFTupdate struct {
-	*baseEnabled
+	baseActiveHandler
 	keyPrefix             []byte
 	dctStorageHandler    vmcommon.DCTNFTStorageHandler
 	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler
@@ -21,15 +20,14 @@ type dctNFTupdate struct {
 	mutExecution          sync.RWMutex
 }
 
-// NewDCTNFTAddUriFunc returns the dct NFT update attribute built-in function component
+// NewDCTNFTUpdateAttributesFunc returns the dct NFT update attribute built-in function component
 func NewDCTNFTUpdateAttributesFunc(
 	funcGasCost uint64,
 	gasConfig vmcommon.BaseOperationCost,
 	dctStorageHandler vmcommon.DCTNFTStorageHandler,
 	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler,
 	rolesHandler vmcommon.DCTRoleHandler,
-	activationEpoch uint32,
-	epochNotifier vmcommon.EpochNotifier,
+	enableEpochsHandler vmcommon.EnableEpochsHandler,
 ) (*dctNFTupdate, error) {
 	if check.IfNil(dctStorageHandler) {
 		return nil, ErrNilDCTNFTStorageHandler
@@ -40,12 +38,12 @@ func NewDCTNFTUpdateAttributesFunc(
 	if check.IfNil(rolesHandler) {
 		return nil, ErrNilRolesHandler
 	}
-	if check.IfNil(epochNotifier) {
-		return nil, ErrNilEpochHandler
+	if check.IfNil(enableEpochsHandler) {
+		return nil, ErrNilEnableEpochsHandler
 	}
 
 	e := &dctNFTupdate{
-		keyPrefix:             []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
+		keyPrefix:             []byte(baseDCTKeyPrefix),
 		dctStorageHandler:    dctStorageHandler,
 		funcGasCost:           funcGasCost,
 		mutExecution:          sync.RWMutex{},
@@ -54,13 +52,7 @@ func NewDCTNFTUpdateAttributesFunc(
 		rolesHandler:          rolesHandler,
 	}
 
-	e.baseEnabled = &baseEnabled{
-		function:        core.BuiltInFunctionDCTNFTUpdateAttributes,
-		activationEpoch: activationEpoch,
-		flagActivated:   atomic.Flag{},
-	}
-
-	epochNotifier.RegisterNotifyHandler(e)
+	e.baseActiveHandler.activeHandler = enableEpochsHandler.IsDCTNFTImprovementV1FlagEnabled
 
 	return e, nil
 }

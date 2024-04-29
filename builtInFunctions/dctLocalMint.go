@@ -11,9 +11,9 @@ import (
 )
 
 type dctLocalMint struct {
-	baseAlwaysActive
+	baseAlwaysActiveHandler
 	keyPrefix             []byte
-	marshalizer           vmcommon.Marshalizer
+	marshaller            vmcommon.Marshalizer
 	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler
 	rolesHandler          vmcommon.DCTRoleHandler
 	funcGasCost           uint64
@@ -23,11 +23,11 @@ type dctLocalMint struct {
 // NewDCTLocalMintFunc returns the dct local mint built-in function component
 func NewDCTLocalMintFunc(
 	funcGasCost uint64,
-	marshalizer vmcommon.Marshalizer,
+	marshaller vmcommon.Marshalizer,
 	globalSettingsHandler vmcommon.DCTGlobalSettingsHandler,
 	rolesHandler vmcommon.DCTRoleHandler,
 ) (*dctLocalMint, error) {
-	if check.IfNil(marshalizer) {
+	if check.IfNil(marshaller) {
 		return nil, ErrNilMarshalizer
 	}
 	if check.IfNil(globalSettingsHandler) {
@@ -38,8 +38,8 @@ func NewDCTLocalMintFunc(
 	}
 
 	e := &dctLocalMint{
-		keyPrefix:             []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier),
-		marshalizer:           marshalizer,
+		keyPrefix:             []byte(baseDCTKeyPrefix),
+		marshaller:            marshaller,
 		globalSettingsHandler: globalSettingsHandler,
 		rolesHandler:          rolesHandler,
 		funcGasCost:           funcGasCost,
@@ -85,7 +85,7 @@ func (e *dctLocalMint) ProcessBuiltinFunction(
 
 	value := big.NewInt(0).SetBytes(vmInput.Arguments[1])
 	dctTokenKey := append(e.keyPrefix, tokenID...)
-	err = addToDCTBalance(acntSnd, dctTokenKey, big.NewInt(0).Set(value), e.marshalizer, e.globalSettingsHandler, vmInput.ReturnCallAfterError)
+	err = addToDCTBalance(acntSnd, dctTokenKey, big.NewInt(0).Set(value), e.marshaller, e.globalSettingsHandler, vmInput.ReturnCallAfterError)
 	if err != nil {
 		return nil, err
 	}

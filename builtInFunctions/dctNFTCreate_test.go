@@ -25,8 +25,9 @@ func createNftCreateWithStubArguments() *dctNFTCreate {
 		&mock.DCTRoleHandlerStub{},
 		createNewDCTDataStorageHandler(),
 		&mock.AccountsStub{},
-		0,
-		&mock.EpochNotifierStub{},
+		&mock.EnableEpochsHandlerStub{
+			IsValueLengthCheckFlagEnabledField: true,
+		},
 	)
 
 	return nftCreate
@@ -35,75 +36,102 @@ func createNftCreateWithStubArguments() *dctNFTCreate {
 func TestNewDCTNFTCreateFunc_NilArgumentsShouldErr(t *testing.T) {
 	t.Parallel()
 
-	nftCreate, err := NewDCTNFTCreateFunc(
-		0,
-		vmcommon.BaseOperationCost{},
-		nil,
-		&mock.GlobalSettingsHandlerStub{},
-		&mock.DCTRoleHandlerStub{},
-		createNewDCTDataStorageHandler(),
-		&mock.AccountsStub{},
-		0,
-		&mock.EpochNotifierStub{},
-	)
-	assert.True(t, check.IfNil(nftCreate))
-	assert.Equal(t, ErrNilMarshalizer, err)
+	t.Run("nil marshaller should error", func(t *testing.T) {
+		t.Parallel()
 
-	nftCreate, err = NewDCTNFTCreateFunc(
-		0,
-		vmcommon.BaseOperationCost{},
-		&mock.MarshalizerMock{},
-		nil,
-		&mock.DCTRoleHandlerStub{},
-		createNewDCTDataStorageHandler(),
-		&mock.AccountsStub{},
-		0,
-		&mock.EpochNotifierStub{},
-	)
-	assert.True(t, check.IfNil(nftCreate))
-	assert.Equal(t, ErrNilGlobalSettingsHandler, err)
+		nftCreate, err := NewDCTNFTCreateFunc(
+			0,
+			vmcommon.BaseOperationCost{},
+			nil,
+			&mock.GlobalSettingsHandlerStub{},
+			&mock.DCTRoleHandlerStub{},
+			createNewDCTDataStorageHandler(),
+			&mock.AccountsStub{},
+			&mock.EnableEpochsHandlerStub{},
+		)
+		assert.True(t, check.IfNil(nftCreate))
+		assert.Equal(t, ErrNilMarshalizer, err)
+	})
+	t.Run("nil global settings handler should error", func(t *testing.T) {
+		t.Parallel()
 
-	nftCreate, err = NewDCTNFTCreateFunc(
-		0,
-		vmcommon.BaseOperationCost{},
-		&mock.MarshalizerMock{},
-		&mock.GlobalSettingsHandlerStub{},
-		nil,
-		createNewDCTDataStorageHandler(),
-		&mock.AccountsStub{},
-		0,
-		&mock.EpochNotifierStub{},
-	)
-	assert.True(t, check.IfNil(nftCreate))
-	assert.Equal(t, ErrNilRolesHandler, err)
+		nftCreate, err := NewDCTNFTCreateFunc(
+			0,
+			vmcommon.BaseOperationCost{},
+			&mock.MarshalizerMock{},
+			nil,
+			&mock.DCTRoleHandlerStub{},
+			createNewDCTDataStorageHandler(),
+			&mock.AccountsStub{},
+			&mock.EnableEpochsHandlerStub{},
+		)
+		assert.True(t, check.IfNil(nftCreate))
+		assert.Equal(t, ErrNilGlobalSettingsHandler, err)
+	})
+	t.Run("nil roles handler should error", func(t *testing.T) {
+		t.Parallel()
 
-	nftCreate, err = NewDCTNFTCreateFunc(
-		0,
-		vmcommon.BaseOperationCost{},
-		&mock.MarshalizerMock{},
-		&mock.GlobalSettingsHandlerStub{},
-		&mock.DCTRoleHandlerStub{},
-		nil,
-		&mock.AccountsStub{},
-		0,
-		&mock.EpochNotifierStub{},
-	)
-	assert.True(t, check.IfNil(nftCreate))
-	assert.Equal(t, ErrNilDCTNFTStorageHandler, err)
+		nftCreate, err := NewDCTNFTCreateFunc(
+			0,
+			vmcommon.BaseOperationCost{},
+			&mock.MarshalizerMock{},
+			&mock.GlobalSettingsHandlerStub{},
+			nil,
+			createNewDCTDataStorageHandler(),
+			&mock.AccountsStub{},
+			&mock.EnableEpochsHandlerStub{},
+		)
+		assert.True(t, check.IfNil(nftCreate))
+		assert.Equal(t, ErrNilRolesHandler, err)
+	})
+	t.Run("nil dct storage handler should error", func(t *testing.T) {
+		t.Parallel()
 
-	nftCreate, err = NewDCTNFTCreateFunc(
-		0,
-		vmcommon.BaseOperationCost{},
-		&mock.MarshalizerMock{},
-		&mock.GlobalSettingsHandlerStub{},
-		&mock.DCTRoleHandlerStub{},
-		createNewDCTDataStorageHandler(),
-		&mock.AccountsStub{},
-		0,
-		nil,
-	)
-	assert.True(t, check.IfNil(nftCreate))
-	assert.Equal(t, ErrNilEpochHandler, err)
+		nftCreate, err := NewDCTNFTCreateFunc(
+			0,
+			vmcommon.BaseOperationCost{},
+			&mock.MarshalizerMock{},
+			&mock.GlobalSettingsHandlerStub{},
+			&mock.DCTRoleHandlerStub{},
+			nil,
+			&mock.AccountsStub{},
+			&mock.EnableEpochsHandlerStub{},
+		)
+		assert.True(t, check.IfNil(nftCreate))
+		assert.Equal(t, ErrNilDCTNFTStorageHandler, err)
+	})
+	t.Run("nil enable epochs handler should error", func(t *testing.T) {
+		t.Parallel()
+
+		nftCreate, err := NewDCTNFTCreateFunc(
+			0,
+			vmcommon.BaseOperationCost{},
+			&mock.MarshalizerMock{},
+			&mock.GlobalSettingsHandlerStub{},
+			&mock.DCTRoleHandlerStub{},
+			createNewDCTDataStorageHandler(),
+			&mock.AccountsStub{},
+			nil,
+		)
+		assert.True(t, check.IfNil(nftCreate))
+		assert.Equal(t, ErrNilEnableEpochsHandler, err)
+	})
+	t.Run("should work", func(t *testing.T) {
+		t.Parallel()
+
+		nftCreate, err := NewDCTNFTCreateFunc(
+			0,
+			vmcommon.BaseOperationCost{},
+			&mock.MarshalizerMock{},
+			&mock.GlobalSettingsHandlerStub{},
+			&mock.DCTRoleHandlerStub{},
+			createNewDCTDataStorageHandler(),
+			&mock.AccountsStub{},
+			&mock.EnableEpochsHandlerStub{},
+		)
+		assert.Nil(t, err)
+		assert.False(t, check.IfNil(nftCreate))
+	})
 }
 
 func TestNewDCTNFTCreateFunc(t *testing.T) {
@@ -117,8 +145,9 @@ func TestNewDCTNFTCreateFunc(t *testing.T) {
 		&mock.DCTRoleHandlerStub{},
 		createNewDCTDataStorageHandler(),
 		&mock.AccountsStub{},
-		0,
-		&mock.EpochNotifierStub{},
+		&mock.EnableEpochsHandlerStub{
+			IsValueLengthCheckFlagEnabledField: true,
+		},
 	)
 	assert.False(t, check.IfNil(nftCreate))
 	assert.Nil(t, err)
@@ -214,8 +243,9 @@ func TestDctNFTCreate_ProcessBuiltinFunctionNotAllowedToExecute(t *testing.T) {
 		},
 		dctDataStorage,
 		dctDataStorage.accounts,
-		0,
-		&mock.EpochNotifierStub{},
+		&mock.EnableEpochsHandlerStub{
+			IsValueLengthCheckFlagEnabledField: true,
+		},
 	)
 	sender := mock.NewAccountWrapMock([]byte("address"))
 	vmInput := &vmcommon.ContractCallInput{
@@ -235,16 +265,29 @@ func TestDctNFTCreate_ProcessBuiltinFunctionShouldWork(t *testing.T) {
 	t.Parallel()
 
 	dctDataStorage := createNewDCTDataStorageHandler()
+	firstCheck := true
+	dctRoleHandler := &mock.DCTRoleHandlerStub{
+		CheckAllowedToExecuteCalled: func(account vmcommon.UserAccountHandler, tokenID []byte, action []byte) error {
+			if firstCheck {
+				assert.Equal(t, core.DCTRoleNFTCreate, string(action))
+				firstCheck = false
+			} else {
+				assert.Equal(t, core.DCTRoleNFTAddQuantity, string(action))
+			}
+			return nil
+		},
+	}
 	nftCreate, _ := NewDCTNFTCreateFunc(
 		0,
 		vmcommon.BaseOperationCost{},
 		&mock.MarshalizerMock{},
 		&mock.GlobalSettingsHandlerStub{},
-		&mock.DCTRoleHandlerStub{},
+		dctRoleHandler,
 		dctDataStorage,
 		dctDataStorage.accounts,
-		0,
-		&mock.EpochNotifierStub{},
+		&mock.EnableEpochsHandlerStub{
+			IsValueLengthCheckFlagEnabledField: true,
+		},
 	)
 	address := bytes.Repeat([]byte{1}, 32)
 	sender := mock.NewUserAccount(address)
@@ -280,7 +323,7 @@ func TestDctNFTCreate_ProcessBuiltinFunctionShouldWork(t *testing.T) {
 	assert.Nil(t, err)
 	require.NotNil(t, vmOutput)
 
-	createdDct, latestNonce := readNFTData(t, sender, nftCreate.marshalizer, []byte(token), 1, address)
+	createdDct, latestNonce := readNFTData(t, sender, nftCreate.marshaller, []byte(token), 1, address)
 	assert.Equal(t, uint64(1), latestNonce)
 	expectedDct := &dct.DCToken{
 		Type:  uint32(core.NonFungible),
@@ -298,19 +341,29 @@ func TestDctNFTCreate_ProcessBuiltinFunctionShouldWork(t *testing.T) {
 		Attributes: attributes,
 	}
 
-	tokenKey := []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier + token)
+	tokenKey := []byte(baseDCTKeyPrefix + token)
 	tokenKey = append(tokenKey, big.NewInt(1).Bytes()...)
 
-	metaData, _ := dctDataStorage.getDCTMetaDataFromSystemAccount(tokenKey)
-	assert.Equal(t, tokenMetaData, metaData)
+	dctData, _, _ := dctDataStorage.getDCTDigitalTokenDataFromSystemAccount(tokenKey)
+	assert.Equal(t, tokenMetaData, dctData.TokenMetaData)
+	assert.Equal(t, dctData.Value, quantity)
+
+	dctDataBytes := vmOutput.Logs[0].Topics[3]
+	var dctDataFromLog dct.DCToken
+	_ = nftCreate.marshaller.Unmarshal(&dctDataFromLog, dctDataBytes)
+	require.Equal(t, dctData.TokenMetaData, dctDataFromLog.TokenMetaData)
 }
 
 func TestDctNFTCreate_ProcessBuiltinFunctionWithExecByCaller(t *testing.T) {
 	t.Parallel()
 
 	accounts := createAccountsAdapterWithMap()
-	dctDataStorage := createNewDCTDataStorageHandlerWithArgs(&mock.GlobalSettingsHandlerStub{}, accounts)
-	_ = dctDataStorage.flagSaveToSystemAccount.SetReturningPrevious()
+	enableEpochsHandler := &mock.EnableEpochsHandlerStub{
+		IsValueLengthCheckFlagEnabledField:      true,
+		IsSaveToSystemAccountFlagEnabledField:   true,
+		IsCheckFrozenCollectionFlagEnabledField: true,
+	}
+	dctDataStorage := createNewDCTDataStorageHandlerWithArgs(&mock.GlobalSettingsHandlerStub{}, accounts, enableEpochsHandler)
 	nftCreate, _ := NewDCTNFTCreateFunc(
 		0,
 		vmcommon.BaseOperationCost{},
@@ -319,8 +372,7 @@ func TestDctNFTCreate_ProcessBuiltinFunctionWithExecByCaller(t *testing.T) {
 		&mock.DCTRoleHandlerStub{},
 		dctDataStorage,
 		dctDataStorage.accounts,
-		0,
-		&mock.EpochNotifierStub{},
+		enableEpochsHandler,
 	)
 	address := bytes.Repeat([]byte{1}, 32)
 	userAddress := bytes.Repeat([]byte{2}, 32)
@@ -356,7 +408,7 @@ func TestDctNFTCreate_ProcessBuiltinFunctionWithExecByCaller(t *testing.T) {
 
 	roleAcc, _ := nftCreate.getAccount(address)
 
-	createdDct, latestNonce := readNFTData(t, roleAcc, nftCreate.marshalizer, []byte(token), 1, address)
+	createdDct, latestNonce := readNFTData(t, roleAcc, nftCreate.marshaller, []byte(token), 1, address)
 	assert.Equal(t, uint64(1), latestNonce)
 	expectedDct := &dct.DCToken{
 		Type:  uint32(core.NonFungible),
@@ -374,27 +426,27 @@ func TestDctNFTCreate_ProcessBuiltinFunctionWithExecByCaller(t *testing.T) {
 		Attributes: attributes,
 	}
 
-	tokenKey := []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier + token)
+	tokenKey := []byte(baseDCTKeyPrefix + token)
 	tokenKey = append(tokenKey, big.NewInt(1).Bytes()...)
 
 	metaData, _ := dctDataStorage.getDCTMetaDataFromSystemAccount(tokenKey)
 	assert.Equal(t, tokenMetaData, metaData)
 }
 
-func readNFTData(t *testing.T, account vmcommon.UserAccountHandler, marshalizer vmcommon.Marshalizer, tokenID []byte, nonce uint64, _ []byte) (*dct.DCToken, uint64) {
+func readNFTData(t *testing.T, account vmcommon.UserAccountHandler, marshaller vmcommon.Marshalizer, tokenID []byte, nonce uint64, _ []byte) (*dct.DCToken, uint64) {
 	nonceKey := getNonceKey(tokenID)
-	latestNonceBytes, err := account.(vmcommon.UserAccountHandler).AccountDataHandler().RetrieveValue(nonceKey)
+	latestNonceBytes, _, err := account.(vmcommon.UserAccountHandler).AccountDataHandler().RetrieveValue(nonceKey)
 	require.Nil(t, err)
 	latestNonce := big.NewInt(0).SetBytes(latestNonceBytes).Uint64()
 
-	createdTokenID := []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier)
+	createdTokenID := []byte(baseDCTKeyPrefix)
 	createdTokenID = append(createdTokenID, tokenID...)
 	tokenKey := computeDCTNFTTokenKey(createdTokenID, nonce)
-	data, err := account.(vmcommon.UserAccountHandler).AccountDataHandler().RetrieveValue(tokenKey)
+	data, _, err := account.(vmcommon.UserAccountHandler).AccountDataHandler().RetrieveValue(tokenKey)
 	require.Nil(t, err)
 
 	dctData := &dct.DCToken{}
-	err = marshalizer.Unmarshal(dctData, data)
+	err = marshaller.Unmarshal(dctData, data)
 	require.Nil(t, err)
 
 	return dctData, latestNonce

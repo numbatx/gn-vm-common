@@ -7,6 +7,8 @@ const (
 	MetadataPaused = 1
 	// MetadataLimitedTransfer is the location of limited transfer flag in the dct global meta data
 	MetadataLimitedTransfer = 2
+	// BurnRoleForAll is the location of burn role for all flag in the dct global meta data
+	BurnRoleForAll = 4
 )
 
 const (
@@ -18,6 +20,7 @@ const (
 type DCTGlobalMetadata struct {
 	Paused          bool
 	LimitedTransfer bool
+	BurnRoleForAll  bool
 }
 
 // DCTGlobalMetadataFromBytes creates a metadata object from bytes
@@ -29,6 +32,7 @@ func DCTGlobalMetadataFromBytes(bytes []byte) DCTGlobalMetadata {
 	return DCTGlobalMetadata{
 		Paused:          (bytes[0] & MetadataPaused) != 0,
 		LimitedTransfer: (bytes[0] & MetadataLimitedTransfer) != 0,
+		BurnRoleForAll:  (bytes[0] & BurnRoleForAll) != 0,
 	}
 }
 
@@ -41,6 +45,9 @@ func (metadata *DCTGlobalMetadata) ToBytes() []byte {
 	}
 	if metadata.LimitedTransfer {
 		bytes[0] |= MetadataLimitedTransfer
+	}
+	if metadata.BurnRoleForAll {
+		bytes[0] |= BurnRoleForAll
 	}
 
 	return bytes

@@ -2,11 +2,11 @@ package builtInFunctions
 
 import (
 	"bytes"
-	"encoding/hex"
 	"math/big"
 	"testing"
 
 	"github.com/numbatx/gn-core/core"
+	"github.com/numbatx/gn-core/core/check"
 	"github.com/numbatx/gn-core/data/dct"
 	"github.com/numbatx/gn-core/data/vm"
 	"github.com/numbatx/gn-vm-common"
@@ -14,22 +14,61 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestNewDCTTransferFunc(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil marshaller should error", func(t *testing.T) {
+		t.Parallel()
+
+		transferFunc, err := NewDCTTransferFunc(10, nil, nil, nil, nil, nil)
+		assert.Equal(t, ErrNilMarshalizer, err)
+		assert.True(t, check.IfNil(transferFunc))
+	})
+	t.Run("nil global settings handler should error", func(t *testing.T) {
+		t.Parallel()
+
+		transferFunc, err := NewDCTTransferFunc(10, &mock.MarshalizerMock{}, nil, nil, nil, nil)
+		assert.Equal(t, ErrNilGlobalSettingsHandler, err)
+		assert.True(t, check.IfNil(transferFunc))
+	})
+	t.Run("nil shard coordinator should error", func(t *testing.T) {
+		t.Parallel()
+
+		transferFunc, err := NewDCTTransferFunc(10, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, nil, nil, nil)
+		assert.Equal(t, ErrNilShardCoordinator, err)
+		assert.True(t, check.IfNil(transferFunc))
+	})
+	t.Run("nil roles handler should error", func(t *testing.T) {
+		t.Parallel()
+
+		transferFunc, err := NewDCTTransferFunc(10, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, &mock.ShardCoordinatorStub{}, nil, nil)
+		assert.Equal(t, ErrNilRolesHandler, err)
+		assert.True(t, check.IfNil(transferFunc))
+	})
+	t.Run("nil enable epochs handler should error", func(t *testing.T) {
+		t.Parallel()
+
+		transferFunc, err := NewDCTTransferFunc(10, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, &mock.ShardCoordinatorStub{}, &mock.DCTRoleHandlerStub{}, nil)
+		assert.Equal(t, ErrNilEnableEpochsHandler, err)
+		assert.True(t, check.IfNil(transferFunc))
+	})
+	t.Run("should work", func(t *testing.T) {
+		t.Parallel()
+
+		transferFunc, err := NewDCTTransferFunc(10, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, &mock.ShardCoordinatorStub{}, &mock.DCTRoleHandlerStub{}, &mock.EnableEpochsHandlerStub{})
+		assert.Nil(t, err)
+		assert.False(t, check.IfNil(transferFunc))
+	})
+}
 func TestDCTTransfer_ProcessBuiltInFunctionErrors(t *testing.T) {
 	t.Parallel()
 
 	shardC := &mock.ShardCoordinatorStub{}
-	transferFunc, _ := NewDCTTransferFunc(
-		10,
-		&mock.MarshalizerMock{},
-		&mock.GlobalSettingsHandlerStub{},
-		shardC,
-		&mock.DCTRoleHandlerStub{},
-		1000,
-		0,
-		0,
-		&mock.EpochNotifierStub{},
-	)
-	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
+	transferFunc, _ := NewDCTTransferFunc(10, &mock.MarshalizerMock{}, &mock.GlobalSettingsHandlerStub{}, shardC, &mock.DCTRoleHandlerStub{}, &mock.EnableEpochsHandlerStub{
+		IsTransferToMetaFlagEnabledField:                     false,
+		IsCheckCorrectTokenIDForTransferRoleFlagEnabledField: true,
+	})
+	_ = transferFunc.SetPayableChecker(&mock.PayableHandlerStub{})
 	_, err := transferFunc.ProcessBuiltinFunction(nil, nil, nil)
 	assert.Equal(t, err, ErrNilVmInput)
 
@@ -70,19 +109,19 @@ func TestDCTTransfer_ProcessBuiltInFunctionErrors(t *testing.T) {
 func TestDCTTransfer_ProcessBuiltInFunctionSingleShard(t *testing.T) {
 	t.Parallel()
 
-	marshalizer := &mock.MarshalizerMock{}
-	transferFunc, _ := NewDCTTransferFunc(
-		10,
-		marshalizer,
-		&mock.GlobalSettingsHandlerStub{},
-		&mock.ShardCoordinatorStub{},
-		&mock.DCTRoleHandlerStub{},
-		1000,
-		0,
-		0,
-		&mock.EpochNotifierStub{},
-	)
-	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
+	marshaller := &mock.MarshalizerMock{}
+	dctRoleHandler := &mock.DCTRoleHandlerStub{
+		CheckAllowedToExecuteCalled: func(account vmcommon.UserAccountHandler, tokenID []byte, action []byte) error {
+			assert.Equal(t, core.DCTRoleTransfer, string(action))
+			return nil
+		},
+	}
+	enableEpochsHandler := &mock.EnableEpochsHandlerStub{
+		IsTransferToMetaFlagEnabledField:                     false,
+		IsCheckCorrectTokenIDForTransferRoleFlagEnabledField: true,
+	}
+	transferFunc, _ := NewDCTTransferFunc(10, marshaller, &mock.GlobalSettingsHandlerStub{}, &mock.ShardCoordinatorStub{}, dctRoleHandler, enableEpochsHandler)
+	_ = transferFunc.SetPayableChecker(&mock.PayableHandlerStub{})
 
 	input := &vmcommon.ContractCallInput{
 		VMInput: vmcommon.VMInput{
@@ -101,36 +140,29 @@ func TestDCTTransfer_ProcessBuiltInFunctionSingleShard(t *testing.T) {
 
 	dctKey := append(transferFunc.keyPrefix, key...)
 	dctToken := &dct.DCToken{Value: big.NewInt(100)}
-	marshaledData, _ := marshalizer.Marshal(dctToken)
+	marshaledData, _ := marshaller.Marshal(dctToken)
 	_ = accSnd.AccountDataHandler().SaveKeyValue(dctKey, marshaledData)
 
 	_, err = transferFunc.ProcessBuiltinFunction(accSnd, accDst, input)
 	assert.Nil(t, err)
-	marshaledData, _ = accSnd.AccountDataHandler().RetrieveValue(dctKey)
-	_ = marshalizer.Unmarshal(dctToken, marshaledData)
+	marshaledData, _, _ = accSnd.AccountDataHandler().RetrieveValue(dctKey)
+	_ = marshaller.Unmarshal(dctToken, marshaledData)
 	assert.True(t, dctToken.Value.Cmp(big.NewInt(90)) == 0)
 
-	marshaledData, _ = accDst.AccountDataHandler().RetrieveValue(dctKey)
-	_ = marshalizer.Unmarshal(dctToken, marshaledData)
+	marshaledData, _, _ = accDst.AccountDataHandler().RetrieveValue(dctKey)
+	_ = marshaller.Unmarshal(dctToken, marshaledData)
 	assert.True(t, dctToken.Value.Cmp(big.NewInt(10)) == 0)
 }
 
 func TestDCTTransfer_ProcessBuiltInFunctionSenderInShard(t *testing.T) {
 	t.Parallel()
 
-	marshalizer := &mock.MarshalizerMock{}
-	transferFunc, _ := NewDCTTransferFunc(
-		10,
-		marshalizer,
-		&mock.GlobalSettingsHandlerStub{},
-		&mock.ShardCoordinatorStub{},
-		&mock.DCTRoleHandlerStub{},
-		1000,
-		0,
-		0,
-		&mock.EpochNotifierStub{},
-	)
-	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
+	marshaller := &mock.MarshalizerMock{}
+	transferFunc, _ := NewDCTTransferFunc(10, marshaller, &mock.GlobalSettingsHandlerStub{}, &mock.ShardCoordinatorStub{}, &mock.DCTRoleHandlerStub{}, &mock.EnableEpochsHandlerStub{
+		IsTransferToMetaFlagEnabledField:                     false,
+		IsCheckCorrectTokenIDForTransferRoleFlagEnabledField: true,
+	})
+	_ = transferFunc.SetPayableChecker(&mock.PayableHandlerStub{})
 
 	input := &vmcommon.ContractCallInput{
 		VMInput: vmcommon.VMInput{
@@ -145,32 +177,25 @@ func TestDCTTransfer_ProcessBuiltInFunctionSenderInShard(t *testing.T) {
 
 	dctKey := append(transferFunc.keyPrefix, key...)
 	dctToken := &dct.DCToken{Value: big.NewInt(100)}
-	marshaledData, _ := marshalizer.Marshal(dctToken)
+	marshaledData, _ := marshaller.Marshal(dctToken)
 	_ = accSnd.AccountDataHandler().SaveKeyValue(dctKey, marshaledData)
 
 	_, err := transferFunc.ProcessBuiltinFunction(accSnd, nil, input)
 	assert.Nil(t, err)
-	marshaledData, _ = accSnd.AccountDataHandler().RetrieveValue(dctKey)
-	_ = marshalizer.Unmarshal(dctToken, marshaledData)
+	marshaledData, _, _ = accSnd.AccountDataHandler().RetrieveValue(dctKey)
+	_ = marshaller.Unmarshal(dctToken, marshaledData)
 	assert.True(t, dctToken.Value.Cmp(big.NewInt(90)) == 0)
 }
 
 func TestDCTTransfer_ProcessBuiltInFunctionDestInShard(t *testing.T) {
 	t.Parallel()
 
-	marshalizer := &mock.MarshalizerMock{}
-	transferFunc, _ := NewDCTTransferFunc(
-		10,
-		marshalizer,
-		&mock.GlobalSettingsHandlerStub{},
-		&mock.ShardCoordinatorStub{},
-		&mock.DCTRoleHandlerStub{},
-		1000,
-		0,
-		0,
-		&mock.EpochNotifierStub{},
-	)
-	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
+	marshaller := &mock.MarshalizerMock{}
+	transferFunc, _ := NewDCTTransferFunc(10, marshaller, &mock.GlobalSettingsHandlerStub{}, &mock.ShardCoordinatorStub{}, &mock.DCTRoleHandlerStub{}, &mock.EnableEpochsHandlerStub{
+		IsTransferToMetaFlagEnabledField:                     false,
+		IsCheckCorrectTokenIDForTransferRoleFlagEnabledField: true,
+	})
+	_ = transferFunc.SetPayableChecker(&mock.PayableHandlerStub{})
 
 	input := &vmcommon.ContractCallInput{
 		VMInput: vmcommon.VMInput{
@@ -187,8 +212,8 @@ func TestDCTTransfer_ProcessBuiltInFunctionDestInShard(t *testing.T) {
 	assert.Nil(t, err)
 	dctKey := append(transferFunc.keyPrefix, key...)
 	dctToken := &dct.DCToken{}
-	marshaledData, _ := accDst.AccountDataHandler().RetrieveValue(dctKey)
-	_ = marshalizer.Unmarshal(dctToken, marshaledData)
+	marshaledData, _, _ := accDst.AccountDataHandler().RetrieveValue(dctKey)
+	_ = marshaller.Unmarshal(dctToken, marshaledData)
 	assert.True(t, dctToken.Value.Cmp(big.NewInt(10)) == 0)
 	assert.Equal(t, uint64(0), vmOutput.GasRemaining)
 }
@@ -196,21 +221,14 @@ func TestDCTTransfer_ProcessBuiltInFunctionDestInShard(t *testing.T) {
 func TestDCTTransfer_SndDstFrozen(t *testing.T) {
 	t.Parallel()
 
-	marshalizer := &mock.MarshalizerMock{}
+	marshaller := &mock.MarshalizerMock{}
 	accountStub := &mock.AccountsStub{}
-	dctGlobalSettingsFunc, _ := NewDCTGlobalSettingsFunc(accountStub, true, core.BuiltInFunctionDCTPause, 0, &mock.EpochNotifierStub{})
-	transferFunc, _ := NewDCTTransferFunc(
-		10,
-		marshalizer,
-		dctGlobalSettingsFunc,
-		&mock.ShardCoordinatorStub{},
-		&mock.DCTRoleHandlerStub{},
-		1000,
-		0,
-		0,
-		&mock.EpochNotifierStub{},
-	)
-	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
+	dctGlobalSettingsFunc, _ := NewDCTGlobalSettingsFunc(accountStub, marshaller, true, core.BuiltInFunctionDCTPause, trueHandler)
+	transferFunc, _ := NewDCTTransferFunc(10, marshaller, dctGlobalSettingsFunc, &mock.ShardCoordinatorStub{}, &mock.DCTRoleHandlerStub{}, &mock.EnableEpochsHandlerStub{
+		IsTransferToMetaFlagEnabledField:                     false,
+		IsCheckCorrectTokenIDForTransferRoleFlagEnabledField: true,
+	})
+	_ = transferFunc.SetPayableChecker(&mock.PayableHandlerStub{})
 
 	input := &vmcommon.ContractCallInput{
 		VMInput: vmcommon.VMInput{
@@ -229,25 +247,25 @@ func TestDCTTransfer_SndDstFrozen(t *testing.T) {
 
 	dctKey := append(transferFunc.keyPrefix, key...)
 	dctToken := &dct.DCToken{Value: big.NewInt(100), Properties: dctFrozen.ToBytes()}
-	marshaledData, _ := marshalizer.Marshal(dctToken)
+	marshaledData, _ := marshaller.Marshal(dctToken)
 	_ = accSnd.AccountDataHandler().SaveKeyValue(dctKey, marshaledData)
 
 	_, err := transferFunc.ProcessBuiltinFunction(accSnd, accDst, input)
 	assert.Equal(t, err, ErrDCTIsFrozenForAccount)
 
 	dctToken = &dct.DCToken{Value: big.NewInt(100), Properties: dctNotFrozen.ToBytes()}
-	marshaledData, _ = marshalizer.Marshal(dctToken)
+	marshaledData, _ = marshaller.Marshal(dctToken)
 	_ = accSnd.AccountDataHandler().SaveKeyValue(dctKey, marshaledData)
 
 	dctToken = &dct.DCToken{Value: big.NewInt(100), Properties: dctFrozen.ToBytes()}
-	marshaledData, _ = marshalizer.Marshal(dctToken)
+	marshaledData, _ = marshaller.Marshal(dctToken)
 	_ = accDst.AccountDataHandler().SaveKeyValue(dctKey, marshaledData)
 
 	_, err = transferFunc.ProcessBuiltinFunction(accSnd, accDst, input)
 	assert.Equal(t, err, ErrDCTIsFrozenForAccount)
 
-	marshaledData, _ = accDst.AccountDataHandler().RetrieveValue(dctKey)
-	_ = marshalizer.Unmarshal(dctToken, marshaledData)
+	marshaledData, _, _ = accDst.AccountDataHandler().RetrieveValue(dctKey)
+	_ = marshaller.Unmarshal(dctToken, marshaledData)
 	assert.True(t, dctToken.Value.Cmp(big.NewInt(100)) == 0)
 
 	input.ReturnCallAfterError = true
@@ -255,12 +273,12 @@ func TestDCTTransfer_SndDstFrozen(t *testing.T) {
 	assert.Nil(t, err)
 
 	dctToken = &dct.DCToken{Value: big.NewInt(100), Properties: dctNotFrozen.ToBytes()}
-	marshaledData, _ = marshalizer.Marshal(dctToken)
+	marshaledData, _ = marshaller.Marshal(dctToken)
 	_ = accDst.AccountDataHandler().SaveKeyValue(dctKey, marshaledData)
 
 	systemAccount := mock.NewUserAccount(vmcommon.SystemAccountAddress)
 	dctGlobal := DCTGlobalMetadata{Paused: true}
-	pauseKey := []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier + string(key))
+	pauseKey := []byte(baseDCTKeyPrefix + string(key))
 	_ = systemAccount.AccountDataHandler().SaveKeyValue(pauseKey, dctGlobal.ToBytes())
 
 	accountStub.LoadAccountCalled = func(address []byte) (vmcommon.AccountHandler, error) {
@@ -282,7 +300,7 @@ func TestDCTTransfer_SndDstFrozen(t *testing.T) {
 func TestDCTTransfer_SndDstWithLimitedTransfer(t *testing.T) {
 	t.Parallel()
 
-	marshalizer := &mock.MarshalizerMock{}
+	marshaller := &mock.MarshalizerMock{}
 	accountStub := &mock.AccountsStub{}
 	rolesHandler := &mock.DCTRoleHandlerStub{
 		CheckAllowedToExecuteCalled: func(account vmcommon.UserAccountHandler, tokenID []byte, action []byte) error {
@@ -292,19 +310,12 @@ func TestDCTTransfer_SndDstWithLimitedTransfer(t *testing.T) {
 			return nil
 		},
 	}
-	dctGlobalSettingsFunc, _ := NewDCTGlobalSettingsFunc(accountStub, true, core.BuiltInFunctionDCTSetLimitedTransfer, 0, &mock.EpochNotifierStub{})
-	transferFunc, _ := NewDCTTransferFunc(
-		10,
-		marshalizer,
-		dctGlobalSettingsFunc,
-		&mock.ShardCoordinatorStub{},
-		rolesHandler,
-		1000,
-		0,
-		0,
-		&mock.EpochNotifierStub{},
-	)
-	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
+	dctGlobalSettingsFunc, _ := NewDCTGlobalSettingsFunc(accountStub, marshaller, true, core.BuiltInFunctionDCTSetLimitedTransfer, trueHandler)
+	transferFunc, _ := NewDCTTransferFunc(10, marshaller, dctGlobalSettingsFunc, &mock.ShardCoordinatorStub{}, rolesHandler, &mock.EnableEpochsHandlerStub{
+		IsTransferToMetaFlagEnabledField:                     false,
+		IsCheckCorrectTokenIDForTransferRoleFlagEnabledField: true,
+	})
+	_ = transferFunc.SetPayableChecker(&mock.PayableHandlerStub{})
 
 	input := &vmcommon.ContractCallInput{
 		VMInput: vmcommon.VMInput{
@@ -320,16 +331,16 @@ func TestDCTTransfer_SndDstWithLimitedTransfer(t *testing.T) {
 
 	dctKey := append(transferFunc.keyPrefix, key...)
 	dctToken := &dct.DCToken{Value: big.NewInt(100)}
-	marshaledData, _ := marshalizer.Marshal(dctToken)
+	marshaledData, _ := marshaller.Marshal(dctToken)
 	_ = accSnd.AccountDataHandler().SaveKeyValue(dctKey, marshaledData)
 
 	dctToken = &dct.DCToken{Value: big.NewInt(100)}
-	marshaledData, _ = marshalizer.Marshal(dctToken)
+	marshaledData, _ = marshaller.Marshal(dctToken)
 	_ = accDst.AccountDataHandler().SaveKeyValue(dctKey, marshaledData)
 
 	systemAccount := mock.NewUserAccount(vmcommon.SystemAccountAddress)
 	dctGlobal := DCTGlobalMetadata{LimitedTransfer: true}
-	pauseKey := []byte(core.NumbatProtectedKeyPrefix + core.DCTKeyIdentifier + string(key))
+	pauseKey := []byte(baseDCTKeyPrefix + string(key))
 	_ = systemAccount.AccountDataHandler().SaveKeyValue(pauseKey, dctGlobal.ToBytes())
 
 	accountStub.LoadAccountCalled = func(address []byte) (vmcommon.AccountHandler, error) {
@@ -377,19 +388,12 @@ func TestDCTTransfer_SndDstWithLimitedTransfer(t *testing.T) {
 func TestDCTTransfer_ProcessBuiltInFunctionOnAsyncCallBack(t *testing.T) {
 	t.Parallel()
 
-	marshalizer := &mock.MarshalizerMock{}
-	transferFunc, _ := NewDCTTransferFunc(
-		10,
-		marshalizer,
-		&mock.GlobalSettingsHandlerStub{},
-		&mock.ShardCoordinatorStub{},
-		&mock.DCTRoleHandlerStub{},
-		1000,
-		0,
-		0,
-		&mock.EpochNotifierStub{},
-	)
-	_ = transferFunc.SetPayableHandler(&mock.PayableHandlerStub{})
+	marshaller := &mock.MarshalizerMock{}
+	transferFunc, _ := NewDCTTransferFunc(10, marshaller, &mock.GlobalSettingsHandlerStub{}, &mock.ShardCoordinatorStub{}, &mock.DCTRoleHandlerStub{}, &mock.EnableEpochsHandlerStub{
+		IsTransferToMetaFlagEnabledField:                     false,
+		IsCheckCorrectTokenIDForTransferRoleFlagEnabledField: true,
+	})
+	_ = transferFunc.SetPayableChecker(&mock.PayableHandlerStub{})
 
 	input := &vmcommon.ContractCallInput{
 		VMInput: vmcommon.VMInput{
@@ -406,14 +410,14 @@ func TestDCTTransfer_ProcessBuiltInFunctionOnAsyncCallBack(t *testing.T) {
 
 	dctKey := append(transferFunc.keyPrefix, key...)
 	dctToken := &dct.DCToken{Value: big.NewInt(100)}
-	marshaledData, _ := marshalizer.Marshal(dctToken)
+	marshaledData, _ := marshaller.Marshal(dctToken)
 	_ = accSnd.AccountDataHandler().SaveKeyValue(dctKey, marshaledData)
 
 	vmOutput, err := transferFunc.ProcessBuiltinFunction(nil, accDst, input)
 	assert.Nil(t, err)
 
-	marshaledData, _ = accDst.AccountDataHandler().RetrieveValue(dctKey)
-	_ = marshalizer.Unmarshal(dctToken, marshaledData)
+	marshaledData, _, _ = accDst.AccountDataHandler().RetrieveValue(dctKey)
+	_ = marshaller.Unmarshal(dctToken, marshaledData)
 	assert.True(t, dctToken.Value.Cmp(big.NewInt(10)) == 0)
 
 	assert.Equal(t, vmOutput.GasRemaining, input.GasProvided)
@@ -422,223 +426,7 @@ func TestDCTTransfer_ProcessBuiltInFunctionOnAsyncCallBack(t *testing.T) {
 	assert.Nil(t, err)
 	vmOutput.GasRemaining = input.GasProvided - transferFunc.funcGasCost
 
-	marshaledData, _ = accSnd.AccountDataHandler().RetrieveValue(dctKey)
-	_ = marshalizer.Unmarshal(dctToken, marshaledData)
+	marshaledData, _, _ = accSnd.AccountDataHandler().RetrieveValue(dctKey)
+	_ = marshaller.Unmarshal(dctToken, marshaledData)
 	assert.True(t, dctToken.Value.Cmp(big.NewInt(90)) == 0)
-}
-
-func TestDetermineIsSCCallAfter(t *testing.T) {
-	t.Parallel()
-
-	scAddress, _ := hex.DecodeString("00000000000000000500e9a061848044cc9c6ac2d78dca9e4f72e72a0a5b315c")
-	address, _ := hex.DecodeString("432d6fed4f1d8ac43cd3201fd047b98e27fc9c06efb20c6593ba577cd11228ab")
-	minLenArguments := 4
-	t.Run("less number of arguments should return false", func(t *testing.T) {
-		vmInput := &vmcommon.ContractCallInput{
-			VMInput: vmcommon.VMInput{
-				Arguments: make([][]byte, 0),
-			},
-		}
-
-		for i := 0; i < minLenArguments; i++ {
-			assert.False(t, determineIsSCCallAfter(vmInput, scAddress, minLenArguments, false))
-			assert.False(t, determineIsSCCallAfter(vmInput, scAddress, minLenArguments, true))
-		}
-	})
-	t.Run("ReturnCallAfterError should return false", func(t *testing.T) {
-		vmInput := &vmcommon.ContractCallInput{
-			VMInput: vmcommon.VMInput{
-				Arguments:            [][]byte{[]byte("arg1"), []byte("arg2"), []byte("arg3"), []byte("arg4"), []byte("arg5")},
-				CallType:             vm.AsynchronousCall,
-				ReturnCallAfterError: true,
-			},
-		}
-
-		assert.False(t, determineIsSCCallAfter(vmInput, address, minLenArguments, false))
-		assert.False(t, determineIsSCCallAfter(vmInput, address, minLenArguments, true))
-	})
-	t.Run("not a sc address should return false", func(t *testing.T) {
-		vmInput := &vmcommon.ContractCallInput{
-			VMInput: vmcommon.VMInput{
-				Arguments: [][]byte{[]byte("arg1"), []byte("arg2"), []byte("arg3"), []byte("arg4"), []byte("arg5")},
-			},
-		}
-
-		assert.False(t, determineIsSCCallAfter(vmInput, address, minLenArguments, false))
-		assert.False(t, determineIsSCCallAfter(vmInput, address, minLenArguments, true))
-	})
-	t.Run("empty last argument", func(t *testing.T) {
-		vmInput := &vmcommon.ContractCallInput{
-			VMInput: vmcommon.VMInput{
-				Arguments: [][]byte{[]byte("arg1"), []byte("arg2"), []byte("arg3"), []byte("arg4"), []byte("")},
-			},
-		}
-
-		assert.False(t, determineIsSCCallAfter(vmInput, scAddress, minLenArguments, true))
-		assert.True(t, determineIsSCCallAfter(vmInput, scAddress, minLenArguments, false))
-	})
-	t.Run("should work", func(t *testing.T) {
-		vmInput := &vmcommon.ContractCallInput{
-			VMInput: vmcommon.VMInput{
-				Arguments: [][]byte{[]byte("arg1"), []byte("arg2"), []byte("arg3"), []byte("arg4"), []byte("arg5")},
-			},
-		}
-
-		t.Run("ReturnCallAfterError == false", func(t *testing.T) {
-			assert.True(t, determineIsSCCallAfter(vmInput, scAddress, minLenArguments, true))
-			assert.True(t, determineIsSCCallAfter(vmInput, scAddress, minLenArguments, false))
-		})
-		t.Run("ReturnCallAfterError == true and CallType == AsynchronousCallBack", func(t *testing.T) {
-			vmInput.CallType = vm.AsynchronousCallBack
-			vmInput.ReturnCallAfterError = true
-			assert.True(t, determineIsSCCallAfter(vmInput, scAddress, minLenArguments, true))
-			assert.True(t, determineIsSCCallAfter(vmInput, scAddress, minLenArguments, false))
-		})
-	})
-}
-
-func TestMustVerifyPayable(t *testing.T) {
-	t.Parallel()
-
-	minLenArguments := 4
-	t.Run("call type is AsynchronousCall should return false", func(t *testing.T) {
-		vmInput := &vmcommon.ContractCallInput{
-			VMInput: vmcommon.VMInput{
-				Arguments: [][]byte{[]byte("arg1"), []byte("arg2"), []byte("arg3")},
-				CallType:  vm.AsynchronousCall,
-			},
-		}
-
-		assert.False(t, mustVerifyPayable(vmInput, minLenArguments, true))
-		assert.False(t, mustVerifyPayable(vmInput, minLenArguments, false))
-	})
-	t.Run("call type is DCTTransferAndExecute should return false", func(t *testing.T) {
-		vmInput := &vmcommon.ContractCallInput{
-			VMInput: vmcommon.VMInput{
-				Arguments: [][]byte{[]byte("arg1"), []byte("arg2"), []byte("arg3")},
-				CallType:  vm.DCTTransferAndExecute,
-			},
-		}
-
-		assert.False(t, mustVerifyPayable(vmInput, minLenArguments, true))
-		assert.False(t, mustVerifyPayable(vmInput, minLenArguments, false))
-	})
-	t.Run("arguments represents a SC call should return false", func(t *testing.T) {
-		t.Run("5 arguments", func(t *testing.T) {
-			vmInput := &vmcommon.ContractCallInput{
-				VMInput: vmcommon.VMInput{
-					Arguments: [][]byte{[]byte("arg1"), []byte("arg2"), []byte("arg3"), []byte("arg4"), []byte("arg5")},
-					CallType:  vm.DirectCall,
-				},
-			}
-			assert.False(t, mustVerifyPayable(vmInput, minLenArguments, true))
-			assert.False(t, mustVerifyPayable(vmInput, minLenArguments, false))
-		})
-		t.Run("6 arguments", func(t *testing.T) {
-			vmInput := &vmcommon.ContractCallInput{
-				VMInput: vmcommon.VMInput{
-					Arguments: [][]byte{[]byte("arg1"), []byte("arg2"), []byte("arg3"), []byte("arg4"), []byte("arg5"), []byte("arg6")},
-					CallType:  vm.DirectCall,
-				},
-			}
-			assert.False(t, mustVerifyPayable(vmInput, minLenArguments, true))
-			assert.False(t, mustVerifyPayable(vmInput, minLenArguments, false))
-		})
-	})
-	t.Run("caller is DCT address should return false", func(t *testing.T) {
-		vmInput := &vmcommon.ContractCallInput{
-			VMInput: vmcommon.VMInput{
-				Arguments:  [][]byte{[]byte("arg1"), []byte("arg2"), []byte("arg3")},
-				CallType:   vm.DirectCall,
-				CallerAddr: core.DCTSCAddress,
-			},
-		}
-
-		assert.False(t, mustVerifyPayable(vmInput, minLenArguments, true))
-		assert.False(t, mustVerifyPayable(vmInput, minLenArguments, false))
-	})
-	t.Run("should return true", func(t *testing.T) {
-		vmInput := &vmcommon.ContractCallInput{
-			VMInput: vmcommon.VMInput{
-				Arguments: [][]byte{[]byte("arg1"), []byte("arg2"), []byte("arg3")},
-			},
-		}
-
-		t.Run("call type is DirectCall", func(t *testing.T) {
-			vmInput.CallType = vm.DirectCall
-			assert.True(t, mustVerifyPayable(vmInput, minLenArguments, true))
-			assert.True(t, mustVerifyPayable(vmInput, minLenArguments, false))
-		})
-		t.Run("call type is AsynchronousCallBack", func(t *testing.T) {
-			vmInput.CallType = vm.AsynchronousCallBack
-			assert.True(t, mustVerifyPayable(vmInput, minLenArguments, true))
-			assert.True(t, mustVerifyPayable(vmInput, minLenArguments, false))
-		})
-		t.Run("call type is ExecOnDestByCaller", func(t *testing.T) {
-			vmInput.CallType = vm.ExecOnDestByCaller
-			assert.True(t, mustVerifyPayable(vmInput, minLenArguments, true))
-			assert.True(t, mustVerifyPayable(vmInput, minLenArguments, false))
-		})
-		t.Run("equal arguments than minimum", func(t *testing.T) {
-			vmInput.Arguments = [][]byte{[]byte("arg1"), []byte("arg2"), []byte("arg3"), []byte("arg4")}
-			vmInput.CallType = vm.ExecOnDestByCaller
-			assert.True(t, mustVerifyPayable(vmInput, minLenArguments, true))
-			assert.True(t, mustVerifyPayable(vmInput, minLenArguments, false))
-		})
-		t.Run("5 arguments but no function", func(t *testing.T) {
-			vmInput.Arguments = [][]byte{[]byte("arg1"), []byte("arg2"), []byte("arg3"), []byte("arg4"), make([]byte, 0)}
-			vmInput.CallType = vm.ExecOnDestByCaller
-			assert.True(t, mustVerifyPayable(vmInput, minLenArguments, true))
-			t.Run("backwards compatibility", func(t *testing.T) {
-				assert.False(t, mustVerifyPayable(vmInput, minLenArguments, false))
-			})
-		})
-	})
-}
-
-func TestDCTTransfer_EpochChange(t *testing.T) {
-	t.Parallel()
-
-	var functionHandler vmcommon.EpochSubscriberHandler
-	notifier := &mock.EpochNotifierStub{
-		RegisterNotifyHandlerCalled: func(handler vmcommon.EpochSubscriberHandler) {
-			functionHandler = handler
-		},
-	}
-	transferFunc, _ := NewDCTTransferFunc(
-		10,
-		&mock.MarshalizerMock{},
-		&mock.GlobalSettingsHandlerStub{},
-		&mock.ShardCoordinatorStub{},
-		&mock.DCTRoleHandlerStub{},
-		1,
-		2,
-		3,
-		notifier,
-	)
-
-	functionHandler.EpochConfirmed(0, 0)
-	assert.False(t, transferFunc.flagTransferToMeta.IsSet())
-	assert.False(t, transferFunc.flagCheckCorrectTokenID.IsSet())
-	assert.False(t, transferFunc.flagCheckFunctionArgument.IsSet())
-
-	functionHandler.EpochConfirmed(1, 0)
-	assert.True(t, transferFunc.flagTransferToMeta.IsSet())
-	assert.False(t, transferFunc.flagCheckCorrectTokenID.IsSet())
-	assert.False(t, transferFunc.flagCheckFunctionArgument.IsSet())
-
-	functionHandler.EpochConfirmed(2, 0)
-	assert.True(t, transferFunc.flagTransferToMeta.IsSet())
-	assert.True(t, transferFunc.flagCheckCorrectTokenID.IsSet())
-	assert.False(t, transferFunc.flagCheckFunctionArgument.IsSet())
-
-	functionHandler.EpochConfirmed(3, 0)
-	assert.True(t, transferFunc.flagTransferToMeta.IsSet())
-	assert.True(t, transferFunc.flagCheckCorrectTokenID.IsSet())
-	assert.True(t, transferFunc.flagCheckFunctionArgument.IsSet())
-
-	functionHandler.EpochConfirmed(4, 0)
-	assert.True(t, transferFunc.flagTransferToMeta.IsSet())
-	assert.True(t, transferFunc.flagCheckCorrectTokenID.IsSet())
-	assert.True(t, transferFunc.flagCheckFunctionArgument.IsSet())
 }

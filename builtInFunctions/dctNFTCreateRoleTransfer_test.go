@@ -81,7 +81,7 @@ func TestDCTNFTCreateRoleTransfer_ProcessWithErrors(t *testing.T) {
 }
 
 func createDCTNFTCreateRoleTransferComponent(t *testing.T) *dctNFTCreateRoleTransfer {
-	marshalizer := &mock.MarshalizerMock{}
+	marshaller := &mock.MarshalizerMock{}
 	shardCoordinator := mock.NewMultiShardsCoordinatorMock(2)
 	mapAccounts := make(map[string]vmcommon.UserAccountHandler)
 	accounts := &mock.AccountsStub{
@@ -101,7 +101,7 @@ func createDCTNFTCreateRoleTransferComponent(t *testing.T) *dctNFTCreateRoleTran
 		},
 	}
 
-	e, err := NewDCTNFTCreateRoleTransfer(marshalizer, accounts, shardCoordinator)
+	e, err := NewDCTNFTCreateRoleTransfer(marshaller, accounts, shardCoordinator)
 	assert.Nil(t, err)
 	assert.NotNil(t, e)
 	return e
@@ -124,7 +124,7 @@ func TestDCTNFTCreateRoleTransfer_ProcessAtCurrentShard(t *testing.T) {
 	userAcc := destAcc.(vmcommon.UserAccountHandler)
 
 	dctTokenRoleKey := append(roleKeyPrefix, tokenID...)
-	err := saveRolesToAccount(userAcc, dctTokenRoleKey, &dct.DCTRoles{Roles: [][]byte{[]byte(core.DCTRoleNFTCreate), []byte(core.DCTRoleNFTAddQuantity)}}, e.marshalizer)
+	err := saveRolesToAccount(userAcc, dctTokenRoleKey, &dct.DCTRoles{Roles: [][]byte{[]byte(core.DCTRoleNFTCreate), []byte(core.DCTRoleNFTAddQuantity)}}, e.marshaller)
 	assert.Nil(t, err)
 	_ = saveLatestNonce(userAcc, tokenID, 100)
 	_ = e.accounts.SaveAccount(userAcc)
@@ -198,7 +198,7 @@ func checkNFTCreateRoleExists(t *testing.T, e *dctNFTCreateRoleTransfer, addr []
 	destAcc, _ := e.accounts.LoadAccount(addr)
 	userAcc := destAcc.(vmcommon.UserAccountHandler)
 	dctTokenRoleKey := append(roleKeyPrefix, tokenID...)
-	roles, _, _ := getDCTRolesForAcnt(e.marshalizer, userAcc, dctTokenRoleKey)
+	roles, _, _ := getDCTRolesForAcnt(e.marshaller, userAcc, dctTokenRoleKey)
 	assert.Equal(t, 1, len(roles.Roles))
 	index, _ := doesRoleExist(roles, []byte(core.DCTRoleNFTCreate))
 	assert.Equal(t, expectedIndex, index)

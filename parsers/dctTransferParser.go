@@ -23,18 +23,18 @@ const MinArgsForMultiDCTNFTTransfer = 4
 const ArgsPerTransfer = 3
 
 type dctTransferParser struct {
-	marshalizer vmcommon.Marshalizer
+	marshaller vmcommon.Marshalizer
 }
 
 // NewDCTTransferParser creates a new dct transfer parser
 func NewDCTTransferParser(
-	marshalizer vmcommon.Marshalizer,
+	marshaller vmcommon.Marshalizer,
 ) (*dctTransferParser, error) {
-	if check.IfNil(marshalizer) {
+	if check.IfNil(marshaller) {
 		return nil, ErrNilMarshalizer
 	}
 
-	return &dctTransferParser{marshalizer: marshalizer}, nil
+	return &dctTransferParser{marshaller: marshaller}, nil
 }
 
 // ParseDCTTransfers returns the list of dct transfers, the callFunction and callArgs from the given arguments
@@ -175,7 +175,7 @@ func (e *dctTransferParser) createNewDCTTransfer(
 
 		if !isTxAtSender && len(args[tokenStartIndex+2]) > vmcommon.MaxLengthForValueToOptTransfer {
 			transferDCTData := &dct.DCToken{}
-			err := e.marshalizer.Unmarshal(transferDCTData, args[tokenStartIndex+2])
+			err := e.marshaller.Unmarshal(transferDCTData, args[tokenStartIndex+2])
 			if err != nil {
 				return nil, err
 			}
